@@ -456,11 +456,60 @@ def _find_all_skills_in_repo(repo_dir: Path) -> list[Path]:
         return results
 
     # Scan for SKILL.md files everywhere
-    for skill_md in sorted(repo_dir.rglob("SKILL.md")):
-        if ".git" not in skill_md.parts:
-            results.append(skill_md.parent)
+    results.extend(_scan_skill_dirs(repo_dir))
 
     return results
+
+
+# Path segments that mark test data rather than installable skills.
+_TEST_DATA_SEGMENTS = frozenset(
+    {
+        "test",
+        "tests",
+        "testdata",
+        "fixture",
+        "fixtures",
+        "__tests__",
+        "__fixtures__",
+        "spec",
+        "specs",
+    }
+)
+
+
+def _is_test_data(rel_parent_parts: tuple[str, ...]) -> bool:
+    """True if any path segment above a skill dir names a test-data directory."""
+    return any(part.lower() in _TEST_DATA_SEGMENTS for part in rel_parent_parts)
+
+
+def _scan_skill_dirs(root: Path) -> list[Path]:
+    """Recursively find skill directories under root for discovery.
+
+    - Skips git internals.
+    - Skips skills nested under test-data directories (tests/, fixtures/, ...),
+      judged relative to root so an explicit path into test data still works.
+    - Collapses same-name skills (e.g. per-agent copies under .claude/skills/)
+      to one, preferring paths without dot-directories, then the shallowest.
+    """
+    by_name: dict[str, tuple[tuple[bool, int, str], Path]] = {}
+    for skill_md in root.rglob("SKILL.md"):
+        if ".git" in skill_md.parts:
+            continue
+        skill_dir = skill_md.parent
+        rel_parts = skill_dir.relative_to(root).parts
+        parent_parts = rel_parts[:-1]
+        if _is_test_data(parent_parts):
+            continue
+        rank = (
+            any(part.startswith(".") for part in parent_parts),
+            len(rel_parts),
+            skill_dir.as_posix(),
+        )
+        current = by_name.get(skill_dir.name)
+        if current is None or rank < current[0]:
+            by_name[skill_dir.name] = (rank, skill_dir)
+
+    return sorted(d for _, d in by_name.values())
 
 
 def _discovery_root(repo_dir: Path, subpath: str) -> Path:
@@ -510,13 +559,11 @@ def _find_skill_in_repo(repo_dir: Path, subpath: str) -> Path:
             raise MultipleSkillsError(repo_dir, skill_dirs)
 
     # Scan for any SKILL.md
-    skill_files = list(root.rglob("SKILL.md"))
-    # Filter out git internals
-    skill_files = [f for f in skill_files if ".git" not in f.parts]
-    if len(skill_files) == 1:
-        return skill_files[0].parent
-    if len(skill_files) > 1:
-        raise MultipleSkillsError(repo_dir, [f.parent for f in skill_files])
+    found = _scan_skill_dirs(root)
+    if len(found) == 1:
+        return found[0]
+    if len(found) > 1:
+        raise MultipleSkillsError(repo_dir, found)
 
     raise ResolverError(
         _no_skill_message(subpath),
@@ -591,9 +638,7 @@ def discover_skills_in_repo(repo_dir: Path) -> list[Path]:
         return skill_dirs
 
     # Scan for SKILL.md files
-    for skill_md in sorted(repo_dir.rglob("SKILL.md")):
-        if ".git" not in skill_md.parts:
-            skill_dirs.append(skill_md.parent)
+    skill_dirs.extend(_scan_skill_dirs(repo_dir))
 
     return skill_dirs
 

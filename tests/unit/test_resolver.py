@@ -382,3 +382,62 @@ class TestResolveGitSubdirectory:
     def test_subdirectory_errors(self, bundle_cache, path, skill_filter, message):
         with pytest.raises(ResolverError, match=message):
             resolver.resolve_git(self._parsed(path), bundle_cache, skill_filter=skill_filter)
+
+
+class TestDiscoveryFiltering:
+    """Discovery skips test-data skills and collapses per-agent copies."""
+
+    @staticmethod
+    def _make(root, *rels):
+        for rel in rels:
+            d = root / rel
+            d.mkdir(parents=True)
+            (d / "SKILL.md").write_text(f"---\nname: {d.name}\ndescription: x\n---\n# Hi")
+
+    @pytest.mark.parametrize(
+        "rels, expected",
+        [
+            (
+                ["skills/real", "tests/fixtures/bad-skill", "src/__tests__/demo"],
+                ["skills/real"],
+            ),
+            (["skills/a", "Fixtures/b", "pkg/testdata/c", "spec/d"], ["skills/a"]),
+            (["skills/testing-tools", "skills/test-utils"], None),
+            (["test/skill", "skills/x"], ["skills/x"]),
+        ],
+        ids=["fixtures-and-tests", "case-insensitive-segments", "substring-kept", "test-dir"],
+    )
+    def test_skips_test_data(self, tmp_path, rels, expected):
+        self._make(tmp_path, *rels)
+        found = resolver.discover_skills_in_repo(tmp_path)
+        expected = rels if expected is None else expected
+        assert sorted(d.relative_to(tmp_path).as_posix() for d in found) == sorted(expected)
+
+    def test_skill_dir_named_like_test_data_is_kept(self, tmp_path):
+        self._make(tmp_path, "skills/tests", "skills/other")
+        found = resolver.discover_skills_in_repo(tmp_path)
+        assert sorted(d.name for d in found) == ["other", "tests"]
+
+    def test_collapses_same_name_copies(self, tmp_path):
+        self._make(
+            tmp_path,
+            ".claude/skills/x",
+            "providers/cursor/plugin/skills/x",
+            "skills/x",
+            "plugins/deep/skills/y",
+            ".agents/skills/y",
+        )
+        found = resolver.discover_skills_in_repo(tmp_path)
+        assert [d.relative_to(tmp_path).as_posix() for d in found] == [
+            "plugins/deep/skills/y",
+            "skills/x",
+        ]
+
+    def test_explicit_test_data_path_still_discovers(self, tmp_path):
+        self._make(tmp_path, "tests/fixtures/a", "tests/fixtures/b")
+        root = tmp_path / "tests" / "fixtures"
+        assert [d.name for d in resolver.discover_skills_in_repo(root)] == ["a", "b"]
+
+    def test_single_skill_scan_ignores_fixtures(self, tmp_path):
+        self._make(tmp_path, "src/real", "tests/fixtures/bad-skill")
+        assert resolver._find_skill_in_repo(tmp_path, "") == tmp_path / "src" / "real"
