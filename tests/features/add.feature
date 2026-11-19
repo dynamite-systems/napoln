@@ -21,6 +21,15 @@ Feature: Add a skill
     And the output contains "Dry run"
     And the exit code is 0
 
+  Scenario: Add with dry run after a failed resolve
+    Given Claude Code is installed
+    And an empty directory exists at a test path
+    When I run napoln add with dry run
+    Then the output contains "SKILL.md not found"
+    And the output does not contain "Would update manifest"
+    And the output does not contain "Run without --dry-run to apply."
+    And the exit code is 1
+
   Scenario: Add the same skill twice is idempotent
     Given Claude Code is installed
     And a skill "test-skill" is already installed

@@ -22,6 +22,11 @@ def test_add_dry_run():
     pass
 
 
+@scenario("../features/add.feature", "Add with dry run after a failed resolve")
+def test_add_dry_run_after_error():
+    pass
+
+
 @scenario("../features/add.feature", "Add the same skill twice is idempotent")
 def test_add_idempotent():
     pass
@@ -64,6 +69,12 @@ def test_add_subdir_missing():
 @given("a local skill exists at a test path")
 def local_skill_exists(env: NapolnTestEnv):
     env.create_local_skill()
+
+
+@given("an empty directory exists at a test path")
+def empty_dir_exists(env: NapolnTestEnv):
+    env.skill_dir = env.tmp_path / "empty"
+    env.skill_dir.mkdir()
 
 
 @given(parsers.parse('a skill "{name}" is already installed'))
