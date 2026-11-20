@@ -495,10 +495,32 @@ class TestDiscoveryFiltering:
         assert sorted(d.name for d in exc.value.skill_dirs) == ["bad-skill", "good-skill"]
 
     @pytest.mark.parametrize("skill_filter", ["*", None], ids=["all", "single"])
-    def test_only_test_data_explains_skip(self, fixture_cache, skill_filter):
-        parsed = TestResolveGitSubdirectory._parsed("pkg")
+    @pytest.mark.parametrize(
+        "source, suggested",
+        [
+            ("owner/repo/pkg", "owner/repo/pkg/testdata/sample"),
+            ("owner/repo/pkg@v1.2.0", "owner/repo/pkg/testdata/sample@v1.2.0"),
+            ("github.com/owner/repo/pkg", "owner/repo/pkg/testdata/sample"),
+            ("gitlab.com/owner/repo/pkg@main", "gitlab.com/owner/repo/pkg/testdata/sample@main"),
+        ],
+        ids=["shorthand", "shorthand-pinned", "github-domain", "other-host-pinned"],
+    )
+    def test_only_test_data_suggests_explicit_source(
+        self, fixture_cache, skill_filter, source, suggested
+    ):
+        parsed = parse_source(source)
         with pytest.raises(ResolverError, match="No SKILL.md found at pkg") as exc:
             resolver.resolve_git(parsed, fixture_cache, skill_filter=skill_filter)
 
-        assert "test-data directories" in exc.value.fix
-        assert "owner/repo/pkg/testdata/sample" in exc.value.fix
+        assert exc.value.fix == (
+            "Skills under test-data directories (tests/, fixtures/, spec/, ...) are skipped.\n"
+            f"  To install one, pass its path explicitly, e.g. napoln add {suggested}"
+        )
+        again = parse_source(suggested)
+        assert (again.host, again.owner, again.repo, again.version) == (
+            parsed.host,
+            parsed.owner,
+            parsed.repo,
+            parsed.version,
+        )
+        assert again.path == "pkg/testdata/sample"

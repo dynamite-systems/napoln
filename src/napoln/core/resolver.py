@@ -318,6 +318,7 @@ def resolve_git(
                 fix=_no_skill_fix(
                     clone_dir,
                     discovery_root,
+                    parsed,
                     "Make sure the path contains at least one directory with a SKILL.md file.",
                 ),
             )
@@ -351,7 +352,7 @@ def resolve_git(
         return results
 
     # Single skill resolution
-    skill_dir = _find_skill_in_repo(clone_dir, parsed.path)
+    skill_dir = _find_skill_in_repo(clone_dir, parsed)
     version = _resolve_version(skill_dir, ref, clone_dir)
 
     rel = skill_dir.relative_to(clone_dir)
@@ -540,22 +541,32 @@ def _no_skill_message(subpath: str) -> str:
     return "No SKILL.md found in the repository"
 
 
-def _no_skill_fix(repo_dir: Path, root: Path, default: str) -> str:
+def _source_for_path(parsed: ParsedSource, rel: str) -> str:
+    """Build a source string that parse_source maps back to parsed's repo, rel, and ref."""
+    if parsed.host == "github.com" and "." not in parsed.owner:
+        base = f"{parsed.owner}/{parsed.repo}"
+    else:
+        base = f"{parsed.host}/{parsed.owner}/{parsed.repo}"
+    ref = f"@{parsed.version}" if parsed.version else ""
+    return f"{base}/{rel}{ref}"
+
+
+def _no_skill_fix(repo_dir: Path, root: Path, parsed: ParsedSource, default: str) -> str:
     """Fix hint for an empty discovery, naming any test-data skills that were skipped."""
     skipped = sorted(p.parent for p in root.rglob("SKILL.md") if ".git" not in p.parts)
     if not skipped:
         return default
-    rel = skipped[0].relative_to(repo_dir).as_posix()
+    source = _source_for_path(parsed, skipped[0].relative_to(repo_dir).as_posix())
     return (
         "Skills under test-data directories (tests/, fixtures/, spec/, ...) are skipped.\n"
-        f"  To install one, pass its path in the repo, e.g. napoln add owner/repo/{rel}"
+        f"  To install one, pass its path explicitly, e.g. napoln add {source}"
     )
 
 
-def _find_skill_in_repo(repo_dir: Path, subpath: str) -> Path:
+def _find_skill_in_repo(repo_dir: Path, parsed: ParsedSource) -> Path:
     """Find a single skill directory in a cloned repo.
 
-    The search root is repo_dir, or repo_dir/subpath when a subpath is given.
+    The search root is repo_dir, or repo_dir/parsed.path when a path is given.
     Checks, in order:
     1. If the root has SKILL.md, use it
     2. If the root has a skills/ directory, look there
@@ -564,6 +575,7 @@ def _find_skill_in_repo(repo_dir: Path, subpath: str) -> Path:
     Raises MultipleSkillsError (with repo_dir, not the subpath) when more than
     one skill is found so callers can offer a picker.
     """
+    subpath = parsed.path
     root = _discovery_root(repo_dir, subpath)
 
     # Root-level skill
@@ -589,7 +601,10 @@ def _find_skill_in_repo(repo_dir: Path, subpath: str) -> Path:
     raise ResolverError(
         _no_skill_message(subpath),
         fix=_no_skill_fix(
-            repo_dir, root, "Make sure the path contains a valid skill with a SKILL.md file."
+            repo_dir,
+            root,
+            parsed,
+            "Make sure the path contains a valid skill with a SKILL.md file.",
         ),
     )
 
