@@ -71,10 +71,9 @@ def store_skill(
 
         # Atomic rename
         temp_path.rename(store_path)
-    except Exception:
+    finally:
         if temp_path.exists():
-            shutil.rmtree(temp_path)
-        raise
+            shutil.rmtree(temp_path, ignore_errors=True)
 
     return store_path, content_hash
 

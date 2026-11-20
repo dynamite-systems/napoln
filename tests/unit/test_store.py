@@ -1,5 +1,7 @@
 """Tests for napoln.core.store — content-addressed store operations."""
 
+from pathlib import Path
+
 import pytest
 
 from napoln.core.store import (
@@ -51,6 +53,25 @@ class TestStoreSkill:
 
         assert path1 != path2
         assert hash1 != hash2
+
+    @pytest.mark.parametrize(
+        "exc",
+        [OSError("disk full"), KeyboardInterrupt()],
+        ids=["os-error", "interrupted"],
+    )
+    def test_failed_store_leaves_no_temp_dir(self, skill_builder, store_home, monkeypatch, exc):
+        """A failure after copying must not leave a partial temp entry behind."""
+        skill_dir = skill_builder("my-skill")
+
+        def failing_rename(self, target):
+            raise exc
+
+        monkeypatch.setattr(Path, "rename", failing_rename)
+
+        with pytest.raises(type(exc)):
+            store_skill(skill_dir, "my-skill", "1.0.0", store_home)
+
+        assert list((store_home / "store" / "my-skill").iterdir()) == []
 
     def test_excludes_napoln_file(self, skill_builder, store_home):
         """The .napoln provenance file is not stored."""
