@@ -62,6 +62,11 @@ def test_add_subdir_missing():
     pass
 
 
+@scenario("../features/add.feature", "Add all skills when one is invalid")
+def test_add_all_partial_failure():
+    pass
+
+
 # ─── Given ────────────────────────────────────────────────────────────────────
 # "Claude Code is installed" is in conftest.
 
@@ -98,6 +103,31 @@ def cached_bundle_repo(env: NapolnTestEnv, source: str, bundle_a: str, bundle_b:
                 f"---\nname: {name}\ndescription: A test skill.\n"
                 f'metadata:\n  version: "1.0.0"\n---\n\n# {name}\n'
             )
+    _commit_cached_repo(env, owner, repo)
+
+
+@given(
+    parsers.parse(
+        'a cached git repo "{source}" with skill "{valid}" and nameless skill "{nameless}"'
+    )
+)
+def cached_repo_with_nameless_skill(env: NapolnTestEnv, source: str, valid: str, nameless: str):
+    owner, repo = source.split("/")
+    skills_dir = env.napoln_home / "cache" / f"{owner}-{repo}" / "skills"
+    (skills_dir / valid).mkdir(parents=True)
+    (skills_dir / valid / "SKILL.md").write_text(
+        f"---\nname: {valid}\ndescription: A test skill.\n---\n\n# {valid}\n"
+    )
+    (skills_dir / nameless).mkdir(parents=True)
+    (skills_dir / nameless / "SKILL.md").write_text(
+        f"---\ndescription: A skill without a name.\n---\n\n# {nameless}\n"
+    )
+    _commit_cached_repo(env, owner, repo)
+
+
+def _commit_cached_repo(env: NapolnTestEnv, owner: str, repo: str) -> None:
+    cache_dir = env.napoln_home / "cache"
+    clone_dir = cache_dir / f"{owner}-{repo}"
     git_env = {
         "GIT_AUTHOR_NAME": "t",
         "GIT_AUTHOR_EMAIL": "t@example.com",

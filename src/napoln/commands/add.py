@@ -156,7 +156,7 @@ def run_add(
             worst_exit = code
         if code == 1:
             had_error = True
-        if code <= 2:
+        if code != 1:
             installed_count += 1
 
     if dry_run and not had_error:

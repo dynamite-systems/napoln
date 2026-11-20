@@ -80,3 +80,13 @@ Feature: Add a skill
     When I run napoln add "owner/repo/docs" with --all
     Then the output contains "does not exist"
     And the exit code is 1
+
+  Scenario: Add all skills when one is invalid
+    Given Claude Code is installed
+    And a cached git repo "owner/repo" with skill "good" and nameless skill "bad"
+    When I run napoln add "owner/repo/skills" with --all
+    Then the output contains "Cannot install 'bad'"
+    And the output contains "Installed 1 skill(s)"
+    And the manifest contains skills "good"
+    And the manifest does not contain skills "bad"
+    And the exit code is 1
