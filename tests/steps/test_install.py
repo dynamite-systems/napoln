@@ -67,6 +67,11 @@ def test_add_all_partial_failure():
     pass
 
 
+@scenario("../features/add.feature", "Dry run of all skills when one is invalid")
+def test_add_all_dry_run_partial_failure():
+    pass
+
+
 # ─── Given ────────────────────────────────────────────────────────────────────
 # "Claude Code is installed" is in conftest.
 
@@ -146,6 +151,15 @@ def _commit_cached_repo(env: NapolnTestEnv, owner: str, repo: str) -> None:
 @when(parsers.parse('I run napoln add "{source}" with --all'), target_fixture="result_env")
 def run_add_source_all(env: NapolnTestEnv, source: str, cli_runner: CliRunner):
     env.result = cli_runner.invoke(app, ["add", source, "--all"], env=env.env_vars)
+    return env
+
+
+@when(
+    parsers.parse('I run napoln add "{source}" with --all and dry run'),
+    target_fixture="result_env",
+)
+def run_add_source_all_dry(env: NapolnTestEnv, source: str, cli_runner: CliRunner):
+    env.result = cli_runner.invoke(app, ["add", source, "--all", "--dry-run"], env=env.env_vars)
     return env
 
 

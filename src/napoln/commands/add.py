@@ -137,7 +137,6 @@ def run_add(
     # Install each skill
     worst_exit = 0
     installed_count = 0
-    had_error = False
     for resolved in resolved_list:
         skill_name = skill_name_override or resolved.skill_name or resolved.skill_dir.name
         code = _install_single_skill(
@@ -154,12 +153,10 @@ def run_add(
         )
         if code > worst_exit:
             worst_exit = code
-        if code == 1:
-            had_error = True
         if code != 1:
             installed_count += 1
 
-    if dry_run and not had_error:
+    if dry_run and installed_count:
         output.would("update manifest")
         output.dry_run_footer()
 

@@ -19,6 +19,8 @@ Feature: Add a skill
     Then no skills are stored
     And no placements are created
     And the output contains "Dry run"
+    And the output contains "Would update manifest"
+    And the output contains "Run without --dry-run to apply."
     And the exit code is 0
 
   Scenario: Add with dry run after a failed resolve
@@ -89,4 +91,15 @@ Feature: Add a skill
     And the output contains "Installed 1 skill(s)"
     And the manifest contains skills "good"
     And the manifest does not contain skills "bad"
+    And the exit code is 1
+
+  Scenario: Dry run of all skills when one is invalid
+    Given Claude Code is installed
+    And a cached git repo "owner/repo" with skill "good" and nameless skill "bad"
+    When I run napoln add "owner/repo/skills" with --all and dry run
+    Then the output contains "Cannot install 'bad'"
+    And the output contains "Would store skill 'good'"
+    And the output contains "Would update manifest"
+    And the output contains "Run without --dry-run to apply."
+    And no skills are stored
     And the exit code is 1
