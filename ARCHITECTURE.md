@@ -347,6 +347,11 @@ napoln add owner/repo/skills/my-skill      # a single skill by path
 napoln add ./path/to/skill
 ```
 
+When discovery (`--all`, `--skill`, the picker) scans for `SKILL.md` files below the source root (the repo root or the given subpath), two filters apply:
+
+- **Test data is skipped.** A skill is skipped if a directory between the root and the skill is named `test`, `tests`, `testdata`, `fixture`, `fixtures`, `__tests__`, `__fixtures__`, `spec`, or `specs` (case-insensitive, whole segments). A subpath that itself points into test data turns the filter off.
+- **Same-name copies collapse.** Within one source the skill name is the install identity, so per-agent copies (`skills/x`, `.claude/skills/x`, `providers/cursor/skills/x`) become one choice: the path with no dot-directory, then the shallowest, then the lexically first.
+
 ### Version Resolution
 
 Priority chain: (1) `metadata.version` from SKILL.md frontmatter, (2) semver git tag, (3) git ref, (4) `0.0.0+<short-hash>`.

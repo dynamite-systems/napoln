@@ -382,3 +382,145 @@ class TestResolveGitSubdirectory:
     def test_subdirectory_errors(self, bundle_cache, path, skill_filter, message):
         with pytest.raises(ResolverError, match=message):
             resolver.resolve_git(self._parsed(path), bundle_cache, skill_filter=skill_filter)
+
+
+class TestDiscoveryFiltering:
+    """Discovery skips test-data skills and collapses per-agent copies."""
+
+    @staticmethod
+    def _make(root, *rels):
+        for rel in rels:
+            d = root / rel
+            d.mkdir(parents=True)
+            (d / "SKILL.md").write_text(f"---\nname: {d.name}\ndescription: x\n---\n# Hi")
+
+    @pytest.mark.parametrize(
+        "rels, expected",
+        [
+            (
+                ["skills/real", "tests/fixtures/bad-skill", "src/__tests__/demo"],
+                ["skills/real"],
+            ),
+            (["skills/a", "Fixtures/b", "pkg/testdata/c", "spec/d"], ["skills/a"]),
+            (["skills/testing-tools", "skills/test-utils"], None),
+            (["test/skill", "skills/x"], ["skills/x"]),
+        ],
+        ids=["fixtures-and-tests", "case-insensitive-segments", "substring-kept", "test-dir"],
+    )
+    def test_skips_test_data(self, tmp_path, rels, expected):
+        self._make(tmp_path, *rels)
+        found = resolver.discover_skills_in_repo(tmp_path)
+        expected = rels if expected is None else expected
+        assert sorted(d.relative_to(tmp_path).as_posix() for d in found) == sorted(expected)
+
+    def test_skill_dir_named_like_test_data_is_kept(self, tmp_path):
+        self._make(tmp_path, "skills/tests", "skills/other")
+        found = resolver.discover_skills_in_repo(tmp_path)
+        assert sorted(d.name for d in found) == ["other", "tests"]
+
+    def test_collapses_same_name_copies(self, tmp_path):
+        self._make(
+            tmp_path,
+            ".claude/skills/x",
+            "providers/cursor/plugin/skills/x",
+            "skills/x",
+            "plugins/deep/skills/y",
+            ".agents/skills/y",
+        )
+        found = resolver.discover_skills_in_repo(tmp_path)
+        assert [d.relative_to(tmp_path).as_posix() for d in found] == [
+            "plugins/deep/skills/y",
+            "skills/x",
+        ]
+
+    def test_explicit_test_data_path_still_discovers(self, tmp_path):
+        self._make(tmp_path, "tests/fixtures/a", "tests/fixtures/b")
+        root = tmp_path / "tests" / "fixtures"
+        assert [d.name for d in resolver.discover_skills_in_repo(root)] == ["a", "b"]
+
+    @pytest.fixture
+    def fixture_cache(self, tmp_path, monkeypatch):
+        cache_dir = tmp_path / "cache"
+        self._make(
+            cache_dir / "owner-repo",
+            "skills/real",
+            ".claude/skills/real",
+            "tests/fixtures/bad-skill",
+            "tests/fixtures/good-skill",
+            "pkg/testdata/sample",
+        )
+        _fetch_sentinel(cache_dir, "owner", "repo").touch()
+        monkeypatch.setattr(resolver.shutil, "which", lambda _: "/usr/bin/git")
+        monkeypatch.setattr(
+            resolver.subprocess,
+            "run",
+            lambda cmd, *a, **k: subprocess.CompletedProcess(cmd, 0, stdout="", stderr=""),
+        )
+        return cache_dir
+
+    @pytest.mark.parametrize(
+        "path, skill_filter, expected_rels",
+        [
+            ("", "*", ["skills/real"]),
+            ("", None, ["skills/real"]),
+            ("", "real", ["skills/real"]),
+            ("tests", "*", ["tests/fixtures/bad-skill", "tests/fixtures/good-skill"]),
+            ("tests/fixtures", "*", ["tests/fixtures/bad-skill", "tests/fixtures/good-skill"]),
+            ("tests/fixtures/bad-skill", None, ["tests/fixtures/bad-skill"]),
+        ],
+        ids=[
+            "all-skips-fixtures-and-copies",
+            "single-skips-fixtures-and-copies",
+            "named-skips-copies",
+            "all-explicit-test-dir",
+            "all-explicit-fixtures-dir",
+            "explicit-fixture-skill",
+        ],
+    )
+    def test_resolve_git_discovery(self, fixture_cache, path, skill_filter, expected_rels):
+        parsed = TestResolveGitSubdirectory._parsed(path)
+        result = resolver.resolve_git(parsed, fixture_cache, skill_filter=skill_filter)
+        resolved = result if isinstance(result, list) else [result]
+
+        assert [r.source_id for r in resolved] == [
+            f"github.com/owner/repo/{rel}" for rel in expected_rels
+        ]
+
+    def test_picker_on_explicit_test_dir_offers_fixtures(self, fixture_cache):
+        from napoln.errors import MultipleSkillsError
+
+        with pytest.raises(MultipleSkillsError) as exc:
+            resolver.resolve_git(TestResolveGitSubdirectory._parsed("tests"), fixture_cache)
+
+        assert sorted(d.name for d in exc.value.skill_dirs) == ["bad-skill", "good-skill"]
+
+    @pytest.mark.parametrize("skill_filter", ["*", None], ids=["all", "single"])
+    @pytest.mark.parametrize(
+        "source, suggested",
+        [
+            ("owner/repo/pkg", "owner/repo/pkg/testdata/sample"),
+            ("owner/repo/pkg@v1.2.0", "owner/repo/pkg/testdata/sample@v1.2.0"),
+            ("github.com/owner/repo/pkg", "owner/repo/pkg/testdata/sample"),
+            ("gitlab.com/owner/repo/pkg@main", "gitlab.com/owner/repo/pkg/testdata/sample@main"),
+        ],
+        ids=["shorthand", "shorthand-pinned", "github-domain", "other-host-pinned"],
+    )
+    def test_only_test_data_suggests_explicit_source(
+        self, fixture_cache, skill_filter, source, suggested
+    ):
+        parsed = parse_source(source)
+        with pytest.raises(ResolverError, match="No SKILL.md found at pkg") as exc:
+            resolver.resolve_git(parsed, fixture_cache, skill_filter=skill_filter)
+
+        assert exc.value.fix == (
+            "Skills under test-data directories (tests/, fixtures/, spec/, ...) are skipped.\n"
+            f"  To install one, pass its path explicitly, e.g. napoln add {suggested}"
+        )
+        again = parse_source(suggested)
+        assert (again.host, again.owner, again.repo, again.version) == (
+            parsed.host,
+            parsed.owner,
+            parsed.repo,
+            parsed.version,
+        )
+        assert again.path == "pkg/testdata/sample"

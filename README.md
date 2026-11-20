@@ -69,6 +69,8 @@ napoln add ./my-local-skill                 # local directory
 
 A path after `owner/repo` scopes the install. If it points at a single skill, that skill is installed. If it points at a directory of skills (a bundle in a monorepo), `--all`, `--skill`, and the picker only see skills under that directory.
 
+Discovery skips skills under test-data directories (`tests/`, `fixtures/`, `testdata/`, `spec/`, and similar) and treats copies of the same skill committed for several agents (`skills/x`, `.claude/skills/x`) as one, preferring the copy outside dot-directories. To install a skill from test data, pass its path explicitly, e.g. `napoln add owner/repo/tests/fixtures/x`.
+
 Multi-skill repos show an interactive picker when no `--skill` or `--all` flag is given:
 
 ```bash
