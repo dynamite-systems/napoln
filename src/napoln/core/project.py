@@ -3,35 +3,56 @@
 from __future__ import annotations
 
 import tomllib
+from dataclasses import dataclass
 from pathlib import Path
 
+from napoln.errors import NapolnError
 
-PROJECT_MARKERS = frozenset({".git", ".napoln", ".claude", ".agents", ".cursor"})
+PROJECT_MARKERS = (".git", ".napoln", ".claude", ".agents", ".cursor", ".hermes")
+
+VALID_SCOPES = ("global", "project")
 
 
-def is_inside_project(cwd: Path | None = None) -> bool:
-    """Return whether the current directory appears to be inside a project.
+class ScopeError(NapolnError):
+    """Raised when the install scope cannot be determined."""
 
-    Walks upward from *cwd* (or :func:`os.getcwd`) looking for common
-    project markers: ``.git``, ``.napoln``, ``.claude``, ``.agents``,
-    or ``.cursor``.
+
+@dataclass(frozen=True)
+class ScopeResolution:
+    """The effective scope for a command and, for project scope, its root."""
+
+    scope: str
+    project_root: Path | None = None
+
+
+def find_project_root(start: Path | None = None, home: Path | None = None) -> Path | None:
+    """Return the nearest directory at or above *start* that contains a project marker.
+
+    Markers are ``.git``, ``.napoln``, and the agent config directories
+    (``.claude``, ``.agents``, ``.cursor``, ``.hermes``). The user's home
+    directory and its ancestors are never treated as a project root: the
+    agent directories there hold global configuration, so without this
+    boundary every directory under ``$HOME`` would look like a project.
+
+    Returns ``None`` if no project root is found.
     """
-    if cwd is None:
-        cwd = Path.cwd()
-    for parent in [cwd, *cwd.parents]:
-        # Don't cross filesystem root
-        if parent == parent.parent:
-            break
-        for marker in PROJECT_MARKERS:
-            if (parent / marker).exists():
-                return True
-    return False
+    start = (start if start is not None else Path.cwd()).resolve()
+    home = (home if home is not None else Path.home()).resolve()
+    boundary = {home, *home.parents}
+
+    for candidate in (start, *start.parents):
+        if candidate in boundary:
+            return None
+        if any((candidate / marker).exists() for marker in PROJECT_MARKERS):
+            return candidate
+    return None
 
 
 def load_config_default_scope(napoln_home: Path) -> str | None:
-    """Read the user's configured default_scope from config.toml.
+    """Read the user's configured ``default_scope`` from config.toml.
 
-    Returns ``None`` if the config does not exist or has no default_scope set.
+    Returns ``None`` if the config does not exist, cannot be parsed, or has
+    no valid ``default_scope`` set.
     """
     config_path = napoln_home / "config.toml"
     if not config_path.exists():
@@ -41,36 +62,67 @@ def load_config_default_scope(napoln_home: Path) -> str | None:
     except (OSError, tomllib.TOMLDecodeError):
         return None
     raw = data.get("napoln", {}).get("default_scope")
-    if isinstance(raw, str) and raw in ("global", "project"):
+    if isinstance(raw, str) and raw in VALID_SCOPES:
         return raw
     return None
 
 
-def resolve_scope(
+def resolve_add_scope(
     *,
     global_flag: bool = False,
     project_flag: bool = False,
-    cwd: Path | None = None,
     config_default: str | None = None,
-) -> str:
-    """Resolve the effective scope for a command.
+    cwd: Path | None = None,
+    home: Path | None = None,
+) -> ScopeResolution:
+    """Resolve the effective scope for ``napoln add``.
 
     Resolution order:
-    1. Explicit flags: ``--global`` > ``--project``
-    2. Config default: the user's configured default_scope
-    3. Auto-detect: ``project`` if inside a project, else ``global``
 
-    If *config_default* is set and the user is outside a project,
-    falls back to ``global`` regardless of config (project scope
-    requires a project).
+    1. ``--global`` and ``--project`` together are rejected.
+    2. ``--global`` installs globally; ``--project`` installs into *cwd*.
+    3. A configured ``default_scope = "global"`` installs globally.
+    4. Otherwise (``default_scope = "project"`` or unset), *cwd* must be a
+       project root as detected by :func:`find_project_root`.
+
+    Project scope always uses *cwd* as the project root, matching how
+    ``remove``, ``upgrade``, ``list``, and ``install`` locate the project
+    manifest.
+
+    Raises:
+        ScopeError: If the flags conflict, *cwd* is below a project root,
+            or no project is found.
     """
+    cwd = (cwd if cwd is not None else Path.cwd()).resolve()
+
+    if global_flag and project_flag:
+        raise ScopeError(
+            "--global and --project cannot be used together.",
+            fix="Pass one of --global or --project.",
+        )
     if global_flag:
-        return "global"
+        return ScopeResolution("global")
     if project_flag:
-        return "project"
-    if config_default:
-        if config_default == "global":
-            return "global"
-        if config_default == "project" and is_inside_project(cwd):
-            return "project"
-    return "project" if is_inside_project(cwd) else "global"
+        return ScopeResolution("project", cwd)
+    if config_default == "global":
+        return ScopeResolution("global")
+
+    root = find_project_root(cwd, home)
+    if root == cwd:
+        return ScopeResolution("project", cwd)
+    if root is not None:
+        raise ScopeError(
+            f"The current directory is inside the project at {root}, not at its root.",
+            fix=(
+                f"Run from the project root ({root}), or pass --global to install "
+                "for every session."
+            ),
+        )
+    raise ScopeError(
+        "No project found in the current directory.",
+        cause=(
+            "napoln add installs into the current project by default. A project "
+            f"is a directory containing one of: {', '.join(PROJECT_MARKERS)}."
+        ),
+        fix="Run inside a project, or pass --global to install for every session.",
+    )

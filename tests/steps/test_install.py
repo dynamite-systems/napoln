@@ -57,6 +57,41 @@ def test_add_subdir_missing():
     pass
 
 
+@scenario("../features/add.feature", "Add defaults to project scope at a project root")
+def test_add_defaults_to_project():
+    pass
+
+
+@scenario("../features/add.feature", "Add outside a project fails without --global")
+def test_add_outside_project_fails():
+    pass
+
+
+@scenario("../features/add.feature", "Add from the home directory is not a project install")
+def test_add_from_home_fails():
+    pass
+
+
+@scenario("../features/add.feature", "Add from a project subdirectory fails")
+def test_add_from_subdirectory_fails():
+    pass
+
+
+@scenario("../features/add.feature", "Add with --global outside a project")
+def test_add_global_outside_project():
+    pass
+
+
+@scenario("../features/add.feature", "Configured global default scope keeps installing globally")
+def test_add_config_global_default():
+    pass
+
+
+@scenario("../features/add.feature", "Add with both --global and --project fails")
+def test_add_conflicting_scope_flags():
+    pass
+
+
 # ─── Given ────────────────────────────────────────────────────────────────────
 # "Claude Code is installed" is in conftest.
 
@@ -64,6 +99,39 @@ def test_add_subdir_missing():
 @given("a local skill exists at a test path")
 def local_skill_exists(env: NapolnTestEnv):
     env.create_local_skill()
+
+
+@given("the current directory is a git project root")
+def cwd_project_root(env: NapolnTestEnv, monkeypatch):
+    project = env.tmp_path / "project"
+    (project / ".git").mkdir(parents=True)
+    monkeypatch.chdir(project)
+
+
+@given("the current directory is a subdirectory of a git project")
+def cwd_project_subdir(env: NapolnTestEnv, monkeypatch):
+    project = env.tmp_path / "project"
+    (project / ".git").mkdir(parents=True)
+    (project / "src").mkdir()
+    monkeypatch.chdir(project / "src")
+
+
+@given("the current directory is outside any project")
+def cwd_outside_project(env: NapolnTestEnv, monkeypatch):
+    outside = env.tmp_path / "outside"
+    outside.mkdir()
+    monkeypatch.chdir(outside)
+
+
+@given("the current directory is the home directory")
+def cwd_home(env: NapolnTestEnv, monkeypatch):
+    monkeypatch.chdir(env.home)
+
+
+@given(parsers.parse('the configured default scope is "{scope}"'))
+def configured_default_scope(env: NapolnTestEnv, scope: str):
+    env.napoln_home.mkdir(parents=True, exist_ok=True)
+    (env.napoln_home / "config.toml").write_text(f'[napoln]\ndefault_scope = "{scope}"\n')
 
 
 @given(parsers.parse('a skill "{name}" is already installed'))
@@ -104,7 +172,7 @@ def cached_bundle_repo(env: NapolnTestEnv, source: str, bundle_a: str, bundle_b:
 
 @when(parsers.parse('I run napoln add "{source}" with --all'), target_fixture="result_env")
 def run_add_source_all(env: NapolnTestEnv, source: str, cli_runner: CliRunner):
-    env.result = cli_runner.invoke(app, ["add", source, "--all"], env=env.env_vars)
+    env.result = cli_runner.invoke(app, ["add", source, "--all", "--global"], env=env.env_vars)
     return env
 
 
@@ -113,7 +181,9 @@ def run_add_source_all(env: NapolnTestEnv, source: str, cli_runner: CliRunner):
     target_fixture="result_env",
 )
 def run_add_source_skill(env: NapolnTestEnv, source: str, name: str, cli_runner: CliRunner):
-    env.result = cli_runner.invoke(app, ["add", source, "--skill", name], env=env.env_vars)
+    env.result = cli_runner.invoke(
+        app, ["add", source, "--skill", name, "--global"], env=env.env_vars
+    )
     return env
 
 
@@ -166,6 +236,20 @@ def run_add_project(env: NapolnTestEnv, cli_runner: CliRunner, monkeypatch):
         app,
         ["add", str(env.skill_dir), "--project", "--agents", "claude-code"],
         env=env.env_vars,
+    )
+    return env
+
+
+@when("I run napoln add with the local skill and no scope flag", target_fixture="result_env")
+def run_add_no_scope(env: NapolnTestEnv, cli_runner: CliRunner):
+    env.result = cli_runner.invoke(app, ["add", str(env.skill_dir)], env=env.env_vars)
+    return env
+
+
+@when("I run napoln add with --global and --project", target_fixture="result_env")
+def run_add_both_scopes(env: NapolnTestEnv, cli_runner: CliRunner):
+    env.result = cli_runner.invoke(
+        app, ["add", str(env.skill_dir), "--global", "--project"], env=env.env_vars
     )
     return env
 
@@ -243,3 +327,32 @@ def manifest_lacks_skills(result_env: NapolnTestEnv, names: str):
 @then(parsers.parse('the manifest source for "{name}" is "{source}"'))
 def manifest_source_is(result_env: NapolnTestEnv, name: str, source: str):
     assert _manifest_skills(result_env)[name]["source"] == source
+
+
+@then("the skill is placed in the project Claude Code skills directory")
+def skill_placed_in_project(result_env: NapolnTestEnv):
+    placed = result_env.tmp_path / "project" / ".claude" / "skills" / "test-skill"
+    assert (placed / "SKILL.md").exists(), f"Expected placement at {placed}"
+
+
+@then("the global manifest does not contain the skill")
+def global_manifest_lacks_skill(result_env: NapolnTestEnv):
+    mf_path = result_env.napoln_home / "manifest.toml"
+    if mf_path.exists():
+        assert "test-skill" not in tomllib.loads(mf_path.read_text()).get("skills", {})
+
+
+@then("the bootstrap skill is installed globally")
+def bootstrap_installed_globally(result_env: NapolnTestEnv):
+    mf_path = result_env.napoln_home / "manifest.toml"
+    data = tomllib.loads(mf_path.read_text())
+    entry = data["skills"]["napoln-manage"]
+    assert all(p["scope"] == "global" for p in entry["agents"].values())
+    assert (result_env.home / ".claude" / "skills" / "napoln-manage" / "SKILL.md").exists()
+
+
+@then("no project manifest is written")
+def no_project_manifest(result_env: NapolnTestEnv):
+    found = [p for p in result_env.tmp_path.rglob("manifest.toml") if p.parent.name == ".napoln"]
+    found = [p for p in found if p != result_env.napoln_home / "manifest.toml"]
+    assert not found, f"Unexpected project manifests: {found}"

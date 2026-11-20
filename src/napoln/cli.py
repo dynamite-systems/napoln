@@ -56,10 +56,14 @@ def add(
         typer.Option("--skill", "-s", help="Install a specific skill by name."),
     ] = None,
     project: Annotated[
-        bool, typer.Option("--project", "-p", help="Install to the current project.")
+        bool,
+        typer.Option(
+            "--project", "-p", help="Install into the current directory as the project root."
+        ),
     ] = False,
     global_: Annotated[
-        bool, typer.Option("--global", "-g", help="Install globally (every session).")
+        bool,
+        typer.Option("--global", "-g", help="Install globally (loaded in every agent session)."),
     ] = False,
     agents: Annotated[
         Optional[str],
@@ -73,36 +77,30 @@ def add(
         bool, typer.Option("--dry-run", help="Show what would happen without applying.")
     ] = False,
 ) -> None:
-    """Install skills from a git repo or local path."""
+    """Install skills from a git repo or local path.
+
+    Installs into the current project by default. Use --global to install
+    for every agent session.
+    """
+    from napoln import output
     from napoln.commands.add import run_add
     from napoln.core.home import get_napoln_home
-    from napoln.core.project import is_inside_project, load_config_default_scope, resolve_scope
+    from napoln.core.project import ScopeError, load_config_default_scope, resolve_add_scope
 
     agent_ids = [a.strip() for a in agents.split(",")] if agents else None
 
-    napoln_home = get_napoln_home()
-    config_default = load_config_default_scope(napoln_home)
-    scope = resolve_scope(
-        global_flag=global_,
-        project_flag=project,
-        config_default=config_default,
-    )
-
-    # add is strict: outside a project without an explicit flag, refuse
-    if scope == "global" and not global_ and not is_inside_project():
-        typer.echo(
-            typer.style("Error: ", fg=typer.colors.RED, bold=True)
-            + "No project found in the current directory.\n",
-            err=True,
+    try:
+        resolution = resolve_add_scope(
+            global_flag=global_,
+            project_flag=project,
+            config_default=load_config_default_scope(get_napoln_home()),
         )
-        typer.echo(
-            "Run inside a project, or use --global to install globally:\n"
-            f"  napoln add {source} --global",
-            err=True,
-        )
+    except ScopeError as e:
+        output.error(str(e), cause=e.cause, fix=e.fix)
         raise typer.Exit(code=1)
 
-    project_root = Path.cwd() if scope == "project" else None
+    scope = resolution.scope
+    project_root = resolution.project_root
 
     # Map --all flag to skill_filter='*'
     skill_filter = "*" if all_skills else skill

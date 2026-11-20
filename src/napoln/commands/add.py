@@ -103,6 +103,11 @@ def run_add(
         output.error(str(e))
         return 1
 
+    detected_on_machine = agent_ids is None and not default_agent_ids and scope == "global"
+    if not agent_configs and scope == "project" and agent_ids is None and not default_agent_ids:
+        agent_configs = agents_mod.detect_agents(home)
+        detected_on_machine = True
+
     if not agent_configs:
         output.error(
             "No agents detected.",
@@ -112,7 +117,7 @@ def run_add(
 
     # If the user has multiple agents installed but never configured defaults,
     # nudge them toward `napoln setup` so they don't keep spray-installing.
-    if agent_ids is None and not default_agent_ids and scope == "global" and len(agent_configs) > 1:
+    if detected_on_machine and len(agent_configs) > 1:
         output.info(
             f"Installing to all {len(agent_configs)} detected agents. "
             "Run `napoln setup` to choose defaults."
@@ -122,7 +127,14 @@ def run_add(
         output.dry_run_header()
 
     # Install bootstrap skill on first run (always global)
-    _install_bootstrap_skill(napoln_home, home, agent_configs, dry_run)
+    bootstrap_agents = (
+        agent_configs
+        if scope == "global"
+        else agents_mod.resolve_agents(
+            agent_ids, home, None, "global", default_agent_ids=default_agent_ids
+        )
+    )
+    _install_bootstrap_skill(napoln_home, home, bootstrap_agents, dry_run)
 
     # Load manifest once
     manifest_path: Path = manifest.get_manifest_path(napoln_home, scope, project_root)
@@ -193,12 +205,15 @@ def _install_bootstrap_skill(
     agent_configs: list[agents_mod.AgentConfig],
     dry_run: bool = False,
 ) -> None:
-    """Install the napoln-manage bootstrap skill if not already installed."""
-    # Bootstrap is always global — it teaches agents how to use napoln.
+    """Install the napoln-manage bootstrap skill globally if not already installed.
+
+    The bootstrap skill teaches agents how to use napoln, so it is always
+    placed in the global agent directories regardless of the command's scope.
+    """
     manifest_path = manifest.get_manifest_path(napoln_home)
     mf = manifest.read_manifest(manifest_path)
 
-    if "napoln-manage" in mf.skills:
+    if "napoln-manage" in mf.skills or not agent_configs:
         return
 
     # Find bundled skill
@@ -213,7 +228,7 @@ def _install_bootstrap_skill(
     # Store it
     store_path, content_hash = store.store_skill(skill_dir, "napoln-manage", "0.1.0", napoln_home)
 
-    # Place it globally
+    # Place it
     placements_map = agents_mod.deduplicate_placements(
         agent_configs, "napoln-manage", home, "global", None
     )
