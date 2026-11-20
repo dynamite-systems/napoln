@@ -71,3 +71,12 @@ Feature: Add a skill
     When I run napoln add "owner/repo/docs" with --all
     Then the output contains "does not exist"
     And the exit code is 1
+
+  Scenario: Add all skips test fixtures and per-agent copies
+    Given Claude Code is installed
+    And a cached git repo "owner/repo" with skills at "skills/review,.claude/skills/review,tests/fixtures/bad-skill"
+    When I run napoln add "owner/repo" with --all
+    Then the manifest contains skills "review"
+    And the manifest does not contain skills "bad-skill"
+    And the manifest source for "review" is "github.com/owner/repo/skills/review"
+    And the exit code is 0
