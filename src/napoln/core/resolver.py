@@ -321,14 +321,14 @@ def resolve_git(
             # Filter to a specific skill. Remember what was there before the
             # filter, so a miss can name the alternatives: `napoln list` only
             # knows about installed skills, and takes no source argument.
-            available = sorted(d.name for d in skill_dirs)
+            available = sorted({d.name for d in skill_dirs})
             skill_dirs = [d for d in skill_dirs if d.name == skill_filter]
             if not skill_dirs:
                 raise ResolverError(
                     f"Skill '{skill_filter}' not found in the repository",
                     fix=(
                         f"Available skills: {', '.join(available)}.\n"
-                        "  Pick one with --skill, or run `napoln add <source>` to choose interactively."
+                        "  Use --skill <name> with one of these, or --all to install all."
                     ),
                 )
 

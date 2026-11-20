@@ -390,8 +390,20 @@ class TestResolveGitSubdirectory:
             )
 
         fix = exc.value.fix
-        assert "alpha, beta" in fix
+        assert "Available skills: alpha, beta." in fix
+        assert "gamma" not in fix
         # `napoln list` lists installed skills and takes no source
         # argument, so the old hint sent people to a command that errors.
         assert "napoln list" not in fix
         assert "--skill" in fix
+        assert "--all" in fix
+
+    def test_wrong_skill_name_lists_each_name_once(self, bundle_cache):
+        dup = bundle_cache / "owner-repo" / "bundle-b" / "skills" / "alpha"
+        dup.mkdir(parents=True)
+        (dup / "SKILL.md").write_text("---\nname: alpha\ndescription: x\n---\n# Hi")
+
+        with pytest.raises(ResolverError) as exc:
+            resolver.resolve_git(self._parsed(""), bundle_cache, skill_filter="nope")
+
+        assert "Available skills: alpha, beta, gamma." in exc.value.fix
