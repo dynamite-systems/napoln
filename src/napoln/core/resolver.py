@@ -13,6 +13,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 
+import yaml
+
 from napoln.core.store import store_skill
 from napoln.errors import MultipleSkillsError, ResolverError
 
@@ -531,8 +533,6 @@ def _extract_version(skill_dir: Path) -> str:
         return DEFAULT_VERSION
 
     try:
-        import yaml
-
         content = skill_md.read_text(encoding="utf-8")
         if not content.startswith("---"):
             return DEFAULT_VERSION
@@ -547,7 +547,7 @@ def _extract_version(skill_dir: Path) -> str:
                 return str(metadata["version"])
             if "version" in frontmatter:
                 return str(frontmatter["version"])
-    except Exception:
+    except (OSError, ValueError, yaml.YAMLError):
         pass
 
     return DEFAULT_VERSION
@@ -560,8 +560,6 @@ def _extract_description(skill_dir: Path) -> str:
         return ""
 
     try:
-        import yaml
-
         content = skill_md.read_text(encoding="utf-8")
         if not content.startswith("---"):
             return ""
@@ -571,7 +569,7 @@ def _extract_description(skill_dir: Path) -> str:
         frontmatter = yaml.safe_load(content[3:end])
         if isinstance(frontmatter, dict):
             return str(frontmatter.get("description", ""))
-    except Exception:
+    except (OSError, ValueError, yaml.YAMLError):
         pass
 
     return ""

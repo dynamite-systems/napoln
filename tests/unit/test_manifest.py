@@ -11,6 +11,7 @@ from napoln.core.manifest import (
     remove_skill_from_manifest,
     write_manifest,
 )
+from napoln.errors import ManifestError
 
 
 class TestReadWriteManifest:
@@ -124,6 +125,19 @@ class TestReadWriteManifest:
         assert path.read_bytes() == original_bytes
         leftovers = sorted(p.name for p in tmp_path.iterdir() if p.name != "manifest.toml")
         assert leftovers == [], f"unexpected files: {leftovers}"
+
+    @pytest.mark.parametrize(
+        "content",
+        [b"[invalid toml", b'[napoln]\nschema = "\xff"\n'],
+        ids=["invalid-toml", "invalid-utf8"],
+    )
+    def test_unreadable_manifest_raises_manifest_error(self, tmp_path, content):
+        """Corrupt manifests surface as ManifestError, not a raw parser exception."""
+        path = tmp_path / "manifest.toml"
+        path.write_bytes(content)
+
+        with pytest.raises(ManifestError, match="Could not read manifest"):
+            read_manifest(path)
 
 
 class TestAddSkillToManifest:

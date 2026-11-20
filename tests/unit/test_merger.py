@@ -158,3 +158,8 @@ class TestHasConflictMarkers:
 
     def test_nonexistent_file(self, tmp_path):
         assert has_conflict_markers(tmp_path / "nope.md") is False
+
+    def test_binary_file(self, tmp_path):
+        f = tmp_path / "image.png"
+        f.write_bytes(b"\x89PNG\r\n\x1a\n\xff\xfe<<<<<<< \n=======\n>>>>>>> \n")
+        assert has_conflict_markers(f) is False
