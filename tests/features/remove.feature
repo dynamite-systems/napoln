@@ -41,3 +41,19 @@ Feature: Remove installed skills
     When I run napoln remove --from-source raiderrobert/flow
     Then "design-audit" is no longer placed for Claude Code
     And the exit code is 0
+
+  Scenario: Remove a project skill without --project hints at the flag
+    Given Claude Code is installed
+    And a skill "test-skill" is installed in the current project
+    When I run napoln remove test-skill
+    Then the output contains "napoln remove test-skill --project"
+    And "test-skill" is still placed in the project
+    And the exit code is 0
+
+  Scenario: Remove a project skill with --project
+    Given Claude Code is installed
+    And a skill "test-skill" is installed in the current project
+    When I run napoln remove test-skill --project
+    Then the output contains "Removed"
+    And "test-skill" is no longer placed in the project
+    And the exit code is 0

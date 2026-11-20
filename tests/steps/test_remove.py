@@ -32,6 +32,18 @@ def test_remove_multiple():
     pass
 
 
+@scenario(
+    "../features/remove.feature", "Remove a project skill without --project hints at the flag"
+)
+def test_remove_project_skill_hint():
+    pass
+
+
+@scenario("../features/remove.feature", "Remove a project skill with --project")
+def test_remove_project_skill():
+    pass
+
+
 @scenario("../features/remove.feature", "Remove by source with --from-source")
 def test_remove_from_source():
     pass
@@ -91,3 +103,13 @@ def skill_still_placed(result_env: NapolnTestEnv):
 def named_skill_not_placed(result_env: NapolnTestEnv, name: str):
     skill_dir = result_env.home / ".claude" / "skills" / name
     assert not skill_dir.exists()
+
+
+@then(parsers.parse('"{name}" is still placed in the project'))
+def still_placed_in_project(result_env: NapolnTestEnv, name: str):
+    assert (result_env.tmp_path / "project" / ".claude" / "skills" / name).exists()
+
+
+@then(parsers.parse('"{name}" is no longer placed in the project'))
+def not_placed_in_project(result_env: NapolnTestEnv, name: str):
+    assert not (result_env.tmp_path / "project" / ".claude" / "skills" / name).exists()

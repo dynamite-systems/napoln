@@ -7,6 +7,7 @@ from napoln.core.manifest import (
     Manifest,
     SkillEntry,
     add_skill_to_manifest,
+    find_in_other_scope,
     read_manifest,
     remove_skill_from_manifest,
     write_manifest,
@@ -272,3 +273,36 @@ class TestRemoveSkillFromManifest:
         mf = Manifest()
         mf = remove_skill_from_manifest(mf, "does-not-exist")
         assert mf.skills == {}
+
+
+class TestFindInOtherScope:
+    def _write(self, path, name):
+        mf = Manifest()
+        add_skill_to_manifest(mf, name, "src", "1.0.0", "abc", {})
+        write_manifest(mf, path)
+
+    def test_finds_project_skill_from_global_scope(self, tmp_path):
+        napoln_home = tmp_path / "home" / ".napoln"
+        project = tmp_path / "repo"
+        self._write(project / ".napoln" / "manifest.toml", "foo")
+        assert find_in_other_scope(napoln_home, "foo", "global", project) == "project"
+
+    def test_finds_global_skill_from_project_scope(self, tmp_path):
+        napoln_home = tmp_path / "home" / ".napoln"
+        project = tmp_path / "repo"
+        self._write(napoln_home / "manifest.toml", "foo")
+        assert find_in_other_scope(napoln_home, "foo", "project", project) == "global"
+
+    def test_none_when_absent(self, tmp_path):
+        napoln_home = tmp_path / "home" / ".napoln"
+        project = tmp_path / "repo"
+        self._write(napoln_home / "manifest.toml", "bar")
+        assert find_in_other_scope(napoln_home, "foo", "project", project) is None
+
+    def test_none_when_manifest_unreadable(self, tmp_path):
+        napoln_home = tmp_path / "home" / ".napoln"
+        project = tmp_path / "repo"
+        bad = project / ".napoln" / "manifest.toml"
+        bad.parent.mkdir(parents=True)
+        bad.write_text("not = [toml")
+        assert find_in_other_scope(napoln_home, "foo", "global", project) is None

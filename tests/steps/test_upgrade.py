@@ -57,6 +57,13 @@ def test_script_kept():
     pass
 
 
+@scenario(
+    "../features/upgrade.feature", "Upgrade a project skill without --project hints at the flag"
+)
+def test_upgrade_project_skill_hint():
+    pass
+
+
 # ─── Given ────────────────────────────────────────────────────────────────────
 # "Claude Code is installed" is in conftest.
 

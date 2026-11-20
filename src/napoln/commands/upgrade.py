@@ -40,6 +40,8 @@ def run_upgrade(
     mf = manifest.read_manifest(manifest_path)
 
     if not mf.skills:
+        if name and _report_other_scope(name, napoln_home, scope, project_root):
+            return 1
         output.info("No skills installed.")
         return 0
 
@@ -51,7 +53,8 @@ def run_upgrade(
 
     for skill_name in skills_to_upgrade:
         if skill_name not in mf.skills:
-            output.error(f"Skill '{skill_name}' is not installed.")
+            if not _report_other_scope(skill_name, napoln_home, scope, project_root):
+                output.error(f"Skill '{skill_name}' is not installed.")
             exit_code = 1
             continue
 
@@ -77,6 +80,30 @@ def run_upgrade(
         output.dry_run_footer()
 
     return exit_code
+
+
+def _report_other_scope(
+    name: str, napoln_home: Path, scope: str, project_root: Path | None
+) -> bool:
+    """Report that *name* lives in the other scope, with the command to upgrade it there.
+
+    Returns:
+        True if the skill was found in the other scope and an error was printed.
+    """
+    other_scope = manifest.find_in_other_scope(napoln_home, name, scope, project_root or Path.cwd())
+    if other_scope == "project":
+        output.error(
+            f"Skill '{name}' is not installed globally.",
+            fix=f"It is installed in this project:\n  napoln upgrade {name} --project",
+        )
+        return True
+    if other_scope == "global":
+        output.error(
+            f"Skill '{name}' is not installed in this project.",
+            fix=f"It is installed globally:\n  napoln upgrade {name}",
+        )
+        return True
+    return False
 
 
 def _upgrade_skill(

@@ -89,6 +89,9 @@ def run_remove(
             manifest_path=manifest_path,
             agent_ids=agent_ids,
             dry_run=dry_run,
+            other_scope=manifest.find_in_other_scope(
+                napoln_home, name, scope, project_root or Path.cwd()
+            ),
         )
         if result != 0:
             exit_code = 1
@@ -106,14 +109,30 @@ def _remove_single(
     manifest_path: Path,
     agent_ids: list[str] | None,
     dry_run: bool,
+    other_scope: str | None = None,
 ) -> int:
     """Remove a single skill from manifest and filesystem.
+
+    Args:
+        other_scope: The other scope that lists *name*, used to hint at the
+            right flag when the skill is not installed in this scope.
 
     Returns:
         0 on success, 1 on error.
     """
     if name not in mf.skills:
-        output.info(f"'{name}' is not installed.")
+        if other_scope == "project":
+            output.info(
+                f"'{name}' is not installed globally. It is installed in this project; "
+                f"remove it with: napoln remove {name} --project"
+            )
+        elif other_scope == "global":
+            output.info(
+                f"'{name}' is not installed in this project. It is installed globally; "
+                f"remove it with: napoln remove {name}"
+            )
+        else:
+            output.info(f"'{name}' is not installed.")
         return 0
 
     entry = mf.skills[name]
