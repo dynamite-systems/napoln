@@ -153,10 +153,10 @@ def run_add(
         )
         if code > worst_exit:
             worst_exit = code
-        if code <= 2:
+        if code != 1:
             installed_count += 1
 
-    if dry_run:
+    if dry_run and installed_count:
         output.would("update manifest")
         output.dry_run_footer()
 

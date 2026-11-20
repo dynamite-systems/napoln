@@ -123,3 +123,10 @@ def check_exit_code(result_env: NapolnTestEnv, code: int):
 @then(parsers.parse('the output contains "{text}"'))
 def output_contains(result_env: NapolnTestEnv, text: str):
     assert text in result_env.result.output, f"Expected '{text}' in:\n{result_env.result.output}"
+
+
+@then(parsers.parse('the output does not contain "{text}"'))
+def output_not_contains(result_env: NapolnTestEnv, text: str):
+    assert text not in result_env.result.output, (
+        f"Did not expect '{text}' in:\n{result_env.result.output}"
+    )

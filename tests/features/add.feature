@@ -19,7 +19,18 @@ Feature: Add a skill
     Then no skills are stored
     And no placements are created
     And the output contains "Dry run"
+    And the output contains "Would update manifest"
+    And the output contains "Run without --dry-run to apply."
     And the exit code is 0
+
+  Scenario: Add with dry run after a failed resolve
+    Given Claude Code is installed
+    And an empty directory exists at a test path
+    When I run napoln add with dry run
+    Then the output contains "SKILL.md not found"
+    And the output does not contain "Would update manifest"
+    And the output does not contain "Run without --dry-run to apply."
+    And the exit code is 1
 
   Scenario: Add the same skill twice is idempotent
     Given Claude Code is installed
@@ -70,4 +81,25 @@ Feature: Add a skill
     And a cached git repo "owner/repo" with bundles "bundle-a:alpha,beta" and "bundle-b:gamma"
     When I run napoln add "owner/repo/docs" with --all
     Then the output contains "does not exist"
+    And the exit code is 1
+
+  Scenario: Add all skills when one is invalid
+    Given Claude Code is installed
+    And a cached git repo "owner/repo" with skill "good" and nameless skill "bad"
+    When I run napoln add "owner/repo/skills" with --all
+    Then the output contains "Cannot install 'bad'"
+    And the output contains "Installed 1 skill(s)"
+    And the manifest contains skills "good"
+    And the manifest does not contain skills "bad"
+    And the exit code is 1
+
+  Scenario: Dry run of all skills when one is invalid
+    Given Claude Code is installed
+    And a cached git repo "owner/repo" with skill "good" and nameless skill "bad"
+    When I run napoln add "owner/repo/skills" with --all and dry run
+    Then the output contains "Cannot install 'bad'"
+    And the output contains "Would store skill 'good'"
+    And the output contains "Would update manifest"
+    And the output contains "Run without --dry-run to apply."
+    And no skills are stored
     And the exit code is 1
