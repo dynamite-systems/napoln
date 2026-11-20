@@ -22,15 +22,7 @@ def _get_agent_dirs(entry: manifest.SkillEntry, home: str) -> list[str]:
     seen: set[str] = set()
     dirs: list[str] = []
     for placement in entry.agents.values():
-        # Walk up from skill placement to find the agent root dir
-        # e.g. ~/.claude/skills/my-skill → .claude
-        parent = str(Path(placement.path).parent)  # ~/.claude/skills
-        short = _abbreviate_path(parent, home)  # ~/.claude/skills
-        # Extract the first path component after ~/
-        # e.g. "~/.claude/skills" → ".claude"
-        after_home = short.removeprefix("~/")
-        parts = after_home.split("/")
-        agent_dir = parts[0] if parts else short
+        agent_dir = Path(placement.path).parent.parent.name
         if agent_dir not in seen:
             seen.add(agent_dir)
             dirs.append(agent_dir)

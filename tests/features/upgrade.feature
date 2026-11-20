@@ -57,3 +57,10 @@ Feature: Upgrade with three-way merge
     Then the script in the Claude Code placement retains local changes
     And the manifest version is "1.0.0"
     And the exit code is 2
+
+  Scenario: Upgrade a project skill without --project hints at the flag
+    Given Claude Code is installed
+    And a skill "test-skill" is installed in the current project
+    When I run napoln upgrade test-skill
+    Then the output contains "napoln upgrade test-skill --project"
+    And the exit code is 1

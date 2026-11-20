@@ -57,6 +57,13 @@ def test_script_kept():
     pass
 
 
+@scenario(
+    "../features/upgrade.feature", "Upgrade a project skill without --project hints at the flag"
+)
+def test_upgrade_project_skill_hint():
+    pass
+
+
 # ─── Given ────────────────────────────────────────────────────────────────────
 # "Claude Code is installed" is in conftest.
 
@@ -64,7 +71,7 @@ def test_script_kept():
 @given(parsers.parse('a skill "{name}" is installed at version "{version}"'))
 def skill_installed_at_version(env: NapolnTestEnv, name: str, version: str, cli_runner: CliRunner):
     env.create_local_skill(name, version, BASE_BODY)
-    env.result = cli_runner.invoke(app, ["add", str(env.skill_dir)], env=env.env_vars)
+    env.result = cli_runner.invoke(app, ["add", str(env.skill_dir), "--global"], env=env.env_vars)
     assert env.result.exit_code == 0, env.result.output
 
 
@@ -81,7 +88,7 @@ def skill_with_script_installed(
         BASE_BODY,
         extra_files={"scripts/run.sh": "#!/bin/bash\necho v1\n"},
     )
-    env.result = cli_runner.invoke(app, ["add", str(env.skill_dir)], env=env.env_vars)
+    env.result = cli_runner.invoke(app, ["add", str(env.skill_dir), "--global"], env=env.env_vars)
     assert env.result.exit_code == 0, env.result.output
 
 

@@ -49,6 +49,7 @@ Read [ARCHITECTURE.md](ARCHITECTURE.md) for design decisions. Key points:
 - **Three-way merge on upgrade** using `git merge-file` with `difflib` fallback.
 - **Agent path deduplication.** Gemini CLI, pi, and Codex share `~/.agents/skills/` — one placement serves all three.
 - **Dual-scope manifests.** Global (`~/.napoln/manifest.toml`) and project (`.napoln/manifest.toml`). `napoln install` syncs both.
+- **`add` defaults to project scope.** The current directory must be a project root; `--global` opts in to global. Other commands default to global and take `-p`. See ARCHITECTURE.md "Default scope".
 - **No registry in v0.x.** Git-only sources. Registry identifiers are parsed but return "not yet available".
 - **No telemetry.** Cut until there's a real backend.
 
@@ -60,6 +61,7 @@ Read [ARCHITECTURE.md](ARCHITECTURE.md) for design decisions. Key points:
 - The `NapolnTestEnv` class in `tests/steps/conftest.py` manages isolated BDD environments.
 - The `skill_builder` factory in `tests/conftest.py` creates test skills for unit tests.
 - Use `--agents claude-code` in tests that use `--project` to avoid relying on agent detection.
+- BDD tests run from an empty directory outside any project (see `napoln_env`). Tests that call `napoln add` must pass `--global` or `chdir` into a project root first.
 - BDD tests that check `napoln list` must `chdir` to the isolated home to avoid picking up the real project manifest.
 - Reflink may not be available (Linux ext4, CI). The linker falls back to copy. Tests pass on both.
 
@@ -69,8 +71,8 @@ The CLI has 7 top-level commands. No completion flags in help output. Common sho
 
 | Flag | Meaning | Available on |
 |------|---------|-------------|
-| `-p` | Project scope | add, remove, upgrade, list, install, config doctor |
-| `-g` | Global only | list, install |
+| `-p` | Project scope | add, remove, upgrade, enable, list, install, config doctor |
+| `-g` | Global scope (add) / global only (list, install) | add, list, install |
 | `-a` | Install all skills | add |
 | `-s` | Select specific skill | add |
 | `-v` | Verbose (show paths) | list |

@@ -71,3 +71,71 @@ Feature: Add a skill
     When I run napoln add "owner/repo/docs" with --all
     Then the output contains "does not exist"
     And the exit code is 1
+
+  Scenario: Add defaults to project scope at a project root
+    Given Claude Code is installed
+    And a local skill exists at a test path
+    And the current directory is a git project root
+    When I run napoln add with the local skill and no scope flag
+    Then the project manifest contains the skill
+    And the skill is placed in the project Claude Code skills directory
+    And the global manifest does not contain the skill
+    And the bootstrap skill is installed globally
+    And the exit code is 0
+
+  Scenario: Add outside a project fails without --global
+    Given Claude Code is installed
+    And a local skill exists at a test path
+    And the current directory is outside any project
+    When I run napoln add with the local skill and no scope flag
+    Then the output contains "No project found"
+    And the output contains "--global"
+    And no project manifest is written
+    And the global manifest does not contain the skill
+    And the exit code is 1
+
+  Scenario: Add from the home directory is not a project install
+    Given Claude Code is installed
+    And a local skill exists at a test path
+    And the current directory is the home directory
+    When I run napoln add with the local skill and no scope flag
+    Then the output contains "No project found"
+    And the global manifest does not contain the skill
+    And the exit code is 1
+
+  Scenario: Add from a project subdirectory fails
+    Given Claude Code is installed
+    And a local skill exists at a test path
+    And the current directory is a subdirectory of a git project
+    When I run napoln add with the local skill and no scope flag
+    Then the output contains "not at its root"
+    And no project manifest is written
+    And the exit code is 1
+
+  Scenario: Add with --global outside a project
+    Given Claude Code is installed
+    And a local skill exists at a test path
+    And the current directory is outside any project
+    When I run napoln add with the local skill
+    Then the manifest contains the skill
+    And the skill is placed in the Claude Code skills directory
+    And the exit code is 0
+
+  Scenario: Configured global default scope keeps installing globally
+    Given Claude Code is installed
+    And a local skill exists at a test path
+    And the configured default scope is "global"
+    And the current directory is outside any project
+    When I run napoln add with the local skill and no scope flag
+    Then the manifest contains the skill
+    And no project manifest is written
+    And the exit code is 0
+
+  Scenario: Add with both --global and --project fails
+    Given Claude Code is installed
+    And a local skill exists at a test path
+    And the current directory is a git project root
+    When I run napoln add with --global and --project
+    Then the output contains "cannot be used together"
+    And no project manifest is written
+    And the exit code is 1

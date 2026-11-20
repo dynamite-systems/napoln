@@ -78,7 +78,15 @@ class NapolnTestEnv:
 
 
 @pytest.fixture
-def napoln_env(tmp_path) -> NapolnTestEnv:
+def napoln_env(tmp_path, monkeypatch) -> NapolnTestEnv:
+    """Isolated environment whose cwd is an empty directory outside any project.
+
+    ``napoln add`` defaults to project scope, so running from the napoln
+    checkout would otherwise install into the repository itself.
+    """
+    work = tmp_path / "work"
+    work.mkdir()
+    monkeypatch.chdir(work)
     return NapolnTestEnv(tmp_path)
 
 
@@ -105,8 +113,19 @@ def claude_installed(napoln_env: NapolnTestEnv, monkeypatch):
 @given(parsers.parse('a skill "{name}" is installed'))
 def skill_installed(env: NapolnTestEnv, name: str, cli_runner: CliRunner):
     skill_path = env.create_local_skill(name)
+    result = cli_runner.invoke(app, ["add", str(skill_path), "--global"], env=env.env_vars)
+    assert result.exit_code == 0, result.output
+
+
+@given(parsers.parse('a skill "{name}" is installed in the current project'))
+def skill_installed_in_project(env: NapolnTestEnv, name: str, cli_runner: CliRunner, monkeypatch):
+    project = env.tmp_path / "project"
+    (project / ".git").mkdir(parents=True, exist_ok=True)
+    monkeypatch.chdir(project)
+    skill_path = env.create_local_skill(name)
     result = cli_runner.invoke(app, ["add", str(skill_path)], env=env.env_vars)
     assert result.exit_code == 0, result.output
+    assert (project / ".claude" / "skills" / name).exists()
 
 
 # ─── Shared Then steps ───────────────────────────────────────────────────────
