@@ -180,10 +180,27 @@ installed = "2026-04-14T09:00:00Z"
 
 Following the mise model, napoln supports both global and project manifests:
 
-- **Global** (`~/.napoln/manifest.toml`): Skills always available. Put this in dotfiles for the new-machine story.
+- **Global** (`~/.napoln/manifest.toml`): Skills loaded in every agent session. Put this in dotfiles for the new-machine story.
 - **Project** (`.napoln/manifest.toml`): Skills specific to a codebase. Committed to git. Teammates run `napoln install`.
 
 `napoln install` syncs both manifests automatically, similar to `mise install`.
+
+#### Default scope
+
+`napoln add` defaults to project scope ([#69](https://github.com/dynamite-systems/napoln/issues/69)). Agent harnesses already merge global and project skill directories at session start, so installing into the project keeps stack- or repo-specific skills out of unrelated sessions. Global becomes the deliberate opt-in (`--global`) for skills wanted everywhere, plus the bundled `napoln-manage` skill, which is always placed globally.
+
+Scope resolution for `napoln add`, in order:
+
+1. `--global` and `--project` together are rejected.
+2. `--global` installs globally. `--project` installs with the current directory as the project root.
+3. `default_scope = "global"` in `config.toml` installs globally.
+4. Otherwise the current directory must be a project root: a directory containing `.git`, `.napoln`, `.claude`, `.agents`, `.cursor`, or `.hermes`. If one of its parents is a project root, or no project is found, `add` stops with an error that suggests `--global`.
+
+The search for a project root stops before `$HOME` and its ancestors, because `~/.claude`, `~/.agents`, and `~/.cursor` hold global agent configuration and would otherwise make every directory under `$HOME` look like a project.
+
+The project root is always the current directory, matching how `remove`, `upgrade`, `list`, `install`, and `config doctor` locate the project manifest. Those commands keep their global default and take `-p` for project scope.
+
+In project scope, agents are detected from the project's own agent directories. If none are present and no default agents are configured, `add` falls back to the agents detected on the machine and places into their project skill directories.
 
 ---
 
@@ -196,7 +213,7 @@ $ napoln add owner/repo --skill code-review
 
 1. Parse source → clone/fetch git repo → locate skill directory
 2. Hash skill contents → store at ~/.napoln/store/code-review/1.2.0-ab3f7c/
-3. Detect agents (or use --agents override)
+3. Resolve scope (project by default, --global to opt in) and detect agents (or use --agents override)
 4. Place working copies via reflink (or copy fallback) into each agent directory
 5. Write .napoln provenance file in each placement
 6. Update manifest with version, hash, agent placements
@@ -363,8 +380,8 @@ sort(all files in skill directory) → for each: "{relative_path}\0{file_content
 ## CLI Surface
 
 ```
-napoln add <source> [-a|--all] [-s|--skill <name>] [-p|--project] [--agents <list>]
-                    [--version <ver>] [--name <name>] [--dry-run]
+napoln add <source> [-a|--all] [-s|--skill <name>] [-p|--project | -g|--global]
+                    [--agents <list>] [--version <ver>] [--name <name>] [--dry-run]
 napoln remove <name> [-p|--project] [--agents <list>] [--dry-run]
 napoln upgrade [<name>] [-p|--project] [--version <ver>] [--force] [--dry-run]
 napoln list [-p|--project] [-g|--global] [-v|--verbose] [--json]

@@ -32,6 +32,19 @@ uvx napoln config doctor            # verify integrity
 
 If `uvx` is unavailable, fall back to `python -m napoln` or `pipx run napoln`.
 
+## Scopes
+
+`napoln add` installs into the current project by default: run it from the
+project root (the directory containing `.git`, `.napoln`, `.claude`,
+`.agents`, `.cursor`, or `.hermes`). Project skills load only when an agent
+runs in that project and are recorded in `.napoln/manifest.toml`.
+
+Pass `--global` (`-g`) only when the user wants the skill in every agent
+session. Outside a project, `napoln add` fails until `--global` is given.
+
+`remove`, `upgrade`, and `config doctor` act on global skills unless given
+`--project` (`-p`). For a skill installed in the project, pass `-p`.
+
 ## Install a Skill
 
 ```bash
@@ -44,6 +57,9 @@ uvx napoln add owner/repo/team/skills --all  # All skills under one subdirectory
 
 # From a local path
 uvx napoln add ./path/to/skill
+
+# For every agent session instead of this project
+uvx napoln add owner/repo --skill name --global
 ```
 
 ## Check What's Installed
@@ -60,6 +76,7 @@ uvx napoln list --json       # Machine-readable output
 uvx napoln upgrade              # Upgrade all skills
 uvx napoln upgrade <name>       # Upgrade specific skill
 uvx napoln upgrade --dry-run    # Preview changes without applying
+uvx napoln upgrade -p           # Upgrade skills installed in this project
 ```
 
 If upgrade produces merge conflicts (the user customized a skill and the
@@ -74,6 +91,7 @@ Remove one or more skills:
 
 ```bash
 uvx napoln remove design-audit design-frontend design-preflight
+uvx napoln remove design-audit -p    # Remove a skill installed in this project
 ```
 
 Remove all skills from a specific repository:
