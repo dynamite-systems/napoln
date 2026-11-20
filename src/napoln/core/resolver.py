@@ -311,11 +311,15 @@ def resolve_git(
 
     # Handle multi-skill repos (or multi-skill subdirectories)
     if skill_filter and not (discovery_root / "SKILL.md").exists():
-        skill_dirs = _find_all_skills_in_repo(discovery_root)
+        skill_dirs = _find_all_skills_in_repo(clone_dir, parsed.path)
         if not skill_dirs:
             raise ResolverError(
                 _no_skill_message(parsed.path),
-                fix="Make sure the path contains at least one directory with a SKILL.md file.",
+                fix=_no_skill_fix(
+                    clone_dir,
+                    discovery_root,
+                    "Make sure the path contains at least one directory with a SKILL.md file.",
+                ),
             )
         if skill_filter != "*":
             # Filter to a specific skill
@@ -446,17 +450,21 @@ def _semver_sort_key(tag: str) -> tuple[int, ...]:
         return (0, 0, 0)
 
 
-def _find_all_skills_in_repo(repo_dir: Path) -> list[Path]:
-    """Find all skill directories in a repo (for --skill '*')."""
+def _find_all_skills_in_repo(repo_dir: Path, subpath: str) -> list[Path]:
+    """Find all skill directories in a repo (for --all and --skill).
+
+    The search root is repo_dir, or repo_dir/subpath when a subpath is given.
+    """
+    root = _discovery_root(repo_dir, subpath)
     results: list[Path] = []
 
     # Root-level skill
-    if (repo_dir / "SKILL.md").exists():
-        results.append(repo_dir)
+    if (root / "SKILL.md").exists():
+        results.append(root)
         return results
 
     # Scan for SKILL.md files everywhere
-    results.extend(_scan_skill_dirs(repo_dir))
+    results.extend(_scan_skill_dirs(root, skip_test_data=not _is_test_data(Path(subpath).parts)))
 
     return results
 
@@ -477,17 +485,18 @@ _TEST_DATA_SEGMENTS = frozenset(
 )
 
 
-def _is_test_data(rel_parent_parts: tuple[str, ...]) -> bool:
-    """True if any path segment above a skill dir names a test-data directory."""
-    return any(part.lower() in _TEST_DATA_SEGMENTS for part in rel_parent_parts)
+def _is_test_data(parts: tuple[str, ...]) -> bool:
+    """True if any of the given path segments names a test-data directory."""
+    return any(part.lower() in _TEST_DATA_SEGMENTS for part in parts)
 
 
-def _scan_skill_dirs(root: Path) -> list[Path]:
+def _scan_skill_dirs(root: Path, *, skip_test_data: bool = True) -> list[Path]:
     """Recursively find skill directories under root for discovery.
 
     - Skips git internals.
     - Skips skills nested under test-data directories (tests/, fixtures/, ...),
-      judged relative to root so an explicit path into test data still works.
+      judged relative to root. Callers pass skip_test_data=False when the
+      user's explicit subpath already points into test data.
     - Collapses same-name skills (e.g. per-agent copies under .claude/skills/)
       to one, preferring paths without dot-directories, then the shallowest.
     """
@@ -498,7 +507,7 @@ def _scan_skill_dirs(root: Path) -> list[Path]:
         skill_dir = skill_md.parent
         rel_parts = skill_dir.relative_to(root).parts
         parent_parts = rel_parts[:-1]
-        if _is_test_data(parent_parts):
+        if skip_test_data and _is_test_data(parent_parts):
             continue
         rank = (
             any(part.startswith(".") for part in parent_parts),
@@ -531,6 +540,18 @@ def _no_skill_message(subpath: str) -> str:
     return "No SKILL.md found in the repository"
 
 
+def _no_skill_fix(repo_dir: Path, root: Path, default: str) -> str:
+    """Fix hint for an empty discovery, naming any test-data skills that were skipped."""
+    skipped = sorted(p.parent for p in root.rglob("SKILL.md") if ".git" not in p.parts)
+    if not skipped:
+        return default
+    rel = skipped[0].relative_to(repo_dir).as_posix()
+    return (
+        "Skills under test-data directories (tests/, fixtures/, spec/, ...) are skipped.\n"
+        f"  To install one, pass its path in the repo, e.g. napoln add owner/repo/{rel}"
+    )
+
+
 def _find_skill_in_repo(repo_dir: Path, subpath: str) -> Path:
     """Find a single skill directory in a cloned repo.
 
@@ -559,7 +580,7 @@ def _find_skill_in_repo(repo_dir: Path, subpath: str) -> Path:
             raise MultipleSkillsError(repo_dir, skill_dirs)
 
     # Scan for any SKILL.md
-    found = _scan_skill_dirs(root)
+    found = _scan_skill_dirs(root, skip_test_data=not _is_test_data(Path(subpath).parts))
     if len(found) == 1:
         return found[0]
     if len(found) > 1:
@@ -567,7 +588,9 @@ def _find_skill_in_repo(repo_dir: Path, subpath: str) -> Path:
 
     raise ResolverError(
         _no_skill_message(subpath),
-        fix="Make sure the path contains a valid skill with a SKILL.md file.",
+        fix=_no_skill_fix(
+            repo_dir, root, "Make sure the path contains a valid skill with a SKILL.md file."
+        ),
     )
 
 

@@ -438,6 +438,67 @@ class TestDiscoveryFiltering:
         root = tmp_path / "tests" / "fixtures"
         assert [d.name for d in resolver.discover_skills_in_repo(root)] == ["a", "b"]
 
-    def test_single_skill_scan_ignores_fixtures(self, tmp_path):
-        self._make(tmp_path, "src/real", "tests/fixtures/bad-skill")
-        assert resolver._find_skill_in_repo(tmp_path, "") == tmp_path / "src" / "real"
+    @pytest.fixture
+    def fixture_cache(self, tmp_path, monkeypatch):
+        cache_dir = tmp_path / "cache"
+        self._make(
+            cache_dir / "owner-repo",
+            "skills/real",
+            ".claude/skills/real",
+            "tests/fixtures/bad-skill",
+            "tests/fixtures/good-skill",
+            "pkg/testdata/sample",
+        )
+        _fetch_sentinel(cache_dir, "owner", "repo").touch()
+        monkeypatch.setattr(resolver.shutil, "which", lambda _: "/usr/bin/git")
+        monkeypatch.setattr(
+            resolver.subprocess,
+            "run",
+            lambda cmd, *a, **k: subprocess.CompletedProcess(cmd, 0, stdout="", stderr=""),
+        )
+        return cache_dir
+
+    @pytest.mark.parametrize(
+        "path, skill_filter, expected_rels",
+        [
+            ("", "*", ["skills/real"]),
+            ("", None, ["skills/real"]),
+            ("", "real", ["skills/real"]),
+            ("tests", "*", ["tests/fixtures/bad-skill", "tests/fixtures/good-skill"]),
+            ("tests/fixtures", "*", ["tests/fixtures/bad-skill", "tests/fixtures/good-skill"]),
+            ("tests/fixtures/bad-skill", None, ["tests/fixtures/bad-skill"]),
+        ],
+        ids=[
+            "all-skips-fixtures-and-copies",
+            "single-skips-fixtures-and-copies",
+            "named-skips-copies",
+            "all-explicit-test-dir",
+            "all-explicit-fixtures-dir",
+            "explicit-fixture-skill",
+        ],
+    )
+    def test_resolve_git_discovery(self, fixture_cache, path, skill_filter, expected_rels):
+        parsed = TestResolveGitSubdirectory._parsed(path)
+        result = resolver.resolve_git(parsed, fixture_cache, skill_filter=skill_filter)
+        resolved = result if isinstance(result, list) else [result]
+
+        assert [r.source_id for r in resolved] == [
+            f"github.com/owner/repo/{rel}" for rel in expected_rels
+        ]
+
+    def test_picker_on_explicit_test_dir_offers_fixtures(self, fixture_cache):
+        from napoln.errors import MultipleSkillsError
+
+        with pytest.raises(MultipleSkillsError) as exc:
+            resolver.resolve_git(TestResolveGitSubdirectory._parsed("tests"), fixture_cache)
+
+        assert sorted(d.name for d in exc.value.skill_dirs) == ["bad-skill", "good-skill"]
+
+    @pytest.mark.parametrize("skill_filter", ["*", None], ids=["all", "single"])
+    def test_only_test_data_explains_skip(self, fixture_cache, skill_filter):
+        parsed = TestResolveGitSubdirectory._parsed("pkg")
+        with pytest.raises(ResolverError, match="No SKILL.md found at pkg") as exc:
+            resolver.resolve_git(parsed, fixture_cache, skill_filter=skill_filter)
+
+        assert "test-data directories" in exc.value.fix
+        assert "owner/repo/pkg/testdata/sample" in exc.value.fix
