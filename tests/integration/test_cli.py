@@ -5,10 +5,12 @@ Behavioral tests for each command live in tests/features/*.feature.
 
 from __future__ import annotations
 
+import importlib.metadata
 import re
 
 from typer.testing import CliRunner
 
+import napoln
 from napoln.cli import app
 
 
@@ -18,6 +20,13 @@ class TestVersionCommand:
         assert result.exit_code == 0
         assert "napoln" in result.output
         assert re.search(r"\d+\.\d+\.\d+", result.output)
+
+    def test_version_matches_installed_package(self) -> None:
+        expected = importlib.metadata.version("napoln")
+        result = CliRunner().invoke(app, ["--version"])
+        assert result.exit_code == 0
+        assert result.output.strip() == f"napoln {expected}"
+        assert napoln.__version__ == expected
 
 
 class TestHelpCommand:
