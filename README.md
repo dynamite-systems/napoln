@@ -139,7 +139,7 @@ Skills are installed in one of two scopes:
 
 `napoln add` installs into the current project by default. The current directory is a project root if it contains `.git`, `.napoln`, `.claude`, `.agents`, `.cursor`, or `.hermes`. Your home directory is never treated as a project. Outside a project, or from a subdirectory of one, `napoln add` stops with an error; pass `--global` (`-g`) to install for every session, or `--project` (`-p`) to treat the current directory as the project root.
 
-`remove`, `upgrade`, `enable`, and `config doctor` still act on global skills unless given `-p`. When a named skill is only found in the other scope, they print the command to use.
+`remove`, `upgrade`, `enable`, and `config doctor` still act on global skills unless given `-p`. When a named skill is only found in the other scope, `remove` and `upgrade` print the command to use.
 
 The bundled `napoln-manage` skill is always installed globally.
 
