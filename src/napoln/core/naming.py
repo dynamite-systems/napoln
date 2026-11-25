@@ -6,7 +6,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from napoln.core.manifest import Manifest, SkillEntry
-from napoln.core.resolver import ResolvedSource, SourceType
+from napoln.core.resolver import ResolvedSource, SourceType, parse_source
+from napoln.errors import ResolverError
 
 
 @dataclass(frozen=True)
@@ -15,8 +16,10 @@ class InstallIdResolution:
     to the install id used as the manifest's primary key and placement directory.
 
     `existing` is set when this exact source already has an entry in the manifest
-    (under any id). The caller can short-circuit re-installs by checking
-    `existing.version` and `existing.store_hash`.
+    (under any id), or when a skill of the same upstream name from the same git
+    repo does (the skill moved within its repo). The caller can short-circuit
+    re-installs by checking `existing.source`, `existing.version` and
+    `existing.store_hash`.
 
     `collision_with` is set when the upstream name is already taken in the
     manifest by a *different* source — the install id was namespaced and the
@@ -33,15 +36,21 @@ def resolve_install_id(
 ) -> InstallIdResolution:
     """Decide what install id to use when installing `resolved` as `upstream_name`.
 
-    Three cases:
+    Four cases:
       1. This exact source is already recorded under some id → reuse that id,
          return its `existing` entry so the caller can detect a no-op re-install.
-      2. The upstream name is taken by a different source → namespace the install
+      2. A skill with the same upstream name from the same git repo is recorded
+         under some id → it moved within the repo; reuse that id and entry.
+      3. The upstream name is taken by a different source → namespace the install
          id and report the conflicting source via `collision_with`.
-      3. Neither → install id equals `upstream_name`.
+      4. None of the above → install id equals `upstream_name`.
     """
     for install_id, entry in manifest.skills.items():
         if entry.source == resolved.source_id and entry.name == upstream_name:
+            return InstallIdResolution(install_id, entry, None)
+
+    for install_id, entry in manifest.skills.items():
+        if entry.name == upstream_name and _same_git_repo(entry.source, resolved):
             return InstallIdResolution(install_id, entry, None)
 
     conflict = manifest.skills.get(upstream_name)
@@ -49,6 +58,23 @@ def resolve_install_id(
         return InstallIdResolution(namespace_for(resolved, upstream_name), None, conflict.source)
 
     return InstallIdResolution(upstream_name, None, None)
+
+
+def _same_git_repo(source: str, resolved: ResolvedSource) -> bool:
+    """Whether manifest `source` points into the same git repo as `resolved`."""
+    if resolved.source_type != SourceType.GIT or resolved.parsed is None:
+        return False
+    try:
+        parsed = parse_source(source)
+    except ResolverError:
+        return False
+    if parsed.source_type != SourceType.GIT:
+        return False
+    return (parsed.host, parsed.owner, parsed.repo) == (
+        resolved.parsed.host,
+        resolved.parsed.owner,
+        resolved.parsed.repo,
+    )
 
 
 def namespace_for(resolved: ResolvedSource, skill_name: str) -> str:

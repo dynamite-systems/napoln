@@ -272,7 +272,11 @@ def _install_single_skill(
     install_id: str = resolution.install_id
 
     if resolution.existing is not None:
-        if resolution.existing.version == version and resolution.existing.store_hash:
+        if (
+            resolution.existing.source == resolved.source_id
+            and resolution.existing.version == version
+            and resolution.existing.store_hash
+        ):
             output.info(f"'{install_id}' v{version} is already installed.")
             return 0
     elif resolution.collision_with is not None:

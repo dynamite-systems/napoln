@@ -38,6 +38,10 @@ class ResolverError(NapolnError):
     """Raised when source resolution fails."""
 
 
+class SourcePathNotFoundError(ResolverError):
+    """Raised when a path within a git repository does not exist."""
+
+
 class MultipleSkillsError(ResolverError):
     """Raised when a repo has multiple skills and no filter was given."""
 

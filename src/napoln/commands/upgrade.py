@@ -9,13 +9,14 @@ from napoln import output
 from napoln.core import linker, manifest, merger, store
 from napoln.core.home import get_napoln_home
 from napoln.core.resolver import (
+    ParsedSource,
     ResolvedSource,
     SourceType,
     parse_source,
     resolve_git,
     resolve_local,
 )
-from napoln.errors import ResolverError
+from napoln.errors import ResolverError, SourcePathNotFoundError
 
 
 def run_upgrade(
@@ -94,6 +95,7 @@ def _upgrade_skill(
     project_root: Path | None,
 ) -> int:
     """Upgrade a single skill. Returns exit code."""
+    source = entry.source
     # Resolve new version from source
     try:
         parsed = parse_source(entry.source)
@@ -105,7 +107,12 @@ def _upgrade_skill(
             resolved = resolve_local(parsed)
         elif parsed.source_type == SourceType.GIT:
             cache_dir = napoln_home / "cache"
-            result = resolve_git(parsed, cache_dir)
+            try:
+                result = resolve_git(parsed, cache_dir)
+            except SourcePathNotFoundError:
+                # The skill moved within its repo; look it up by name instead.
+                result = _rediscover_moved_skill(parsed, cache_dir, entry.name or skill_name)
+                source = result.source_id
             # resolve_git can return a list for multi-skill repos;
             # during upgrade the manifest source already has a path,
             # so we always expect a single result.
@@ -122,8 +129,11 @@ def _upgrade_skill(
             output.info(f"Cannot upgrade '{skill_name}': unsupported source type.")
             return 0
     except ResolverError as e:
-        output.error(f"Failed to resolve update for '{skill_name}': {e}")
+        output.error(f"Failed to resolve update for '{skill_name}': {e}", fix=e.fix)
         return 1
+
+    if source != entry.source:
+        output.info(f"'{skill_name}' moved upstream: {entry.source} → {source}")
 
     # Check if there's actually a new version
     from napoln.core.hasher import hash_skill
@@ -131,6 +141,9 @@ def _upgrade_skill(
     new_hash = hash_skill(resolved.skill_dir)
     if new_hash == entry.store_hash and not force:
         output.info(f"'{skill_name}' is already up to date (v{entry.version}).")
+        if source != entry.source and not dry_run:
+            entry.source = source
+            manifest.write_manifest(mf, manifest_path)
         return 0
 
     new_version = resolved.version
@@ -193,7 +206,7 @@ def _upgrade_skill(
         if not placement_conflicted:
             linker.write_provenance(
                 placement_path,
-                entry.source,
+                source,
                 new_version,
                 new_content_hash,
                 placement.link_mode,
@@ -208,6 +221,7 @@ def _upgrade_skill(
                 f"Resolve them, then run `napoln upgrade {skill_name}` again."
             )
         else:
+            entry.source = source
             entry.version = new_version
             entry.store_hash = new_content_hash
             from napoln.core.manifest import _now_iso
@@ -217,3 +231,32 @@ def _upgrade_skill(
             output.success(f"Upgraded '{skill_name}' to v{new_version}")
 
     return 2 if has_conflicts else 0
+
+
+def _rediscover_moved_skill(
+    parsed: ParsedSource, cache_dir: Path, upstream_name: str
+) -> ResolvedSource:
+    """Find a skill by name anywhere in its repo after its recorded path vanished.
+
+    Raises ResolverError unless exactly one skill directory matches.
+    """
+    recorded_path = parsed.path
+    repo_source = f"{parsed.host}/{parsed.owner}/{parsed.repo}"
+    parsed.path = ""
+    try:
+        result = resolve_git(parsed, cache_dir, skill_filter=upstream_name)
+    except ResolverError:
+        raise ResolverError(
+            f"Path '{recorded_path}' does not exist in the repository "
+            f"and no skill named '{upstream_name}' was found elsewhere in it",
+            fix=f"Check the repository, then re-add the skill:\n  napoln add {repo_source}/<path>",
+        )
+    if isinstance(result, list):
+        candidates = cast(list[ResolvedSource], result)
+        paths = "\n".join(f"  napoln add {r.source_id}" for r in candidates)
+        raise ResolverError(
+            f"Path '{recorded_path}' does not exist in the repository "
+            f"and {len(candidates)} skills named '{upstream_name}' were found elsewhere in it",
+            fix=f"Re-add the skill from the intended location:\n{paths}",
+        )
+    return result
