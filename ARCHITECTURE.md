@@ -185,6 +185,17 @@ Following the mise model, napoln supports both global and project manifests:
 
 `napoln install` syncs both manifests automatically, similar to `mise install`.
 
+### Skill Identity
+
+A skill has two names, and they diverge on collision:
+
+- **Install id** — the manifest key and the placement directory name (e.g. `~/.claude/skills/repo-b:shared-name/`). When two different sources ship a skill with the same upstream name, the later one is namespaced (`<namespace>:<name>`) so placements don't clash.
+- **Upstream name** — the `name:` field in SKILL.md frontmatter, also recorded as `name` in the manifest entry. napoln never rewrites SKILL.md on placement, so this stays as the author wrote it (`shared-name`).
+
+**The placement directory name is the canonical installed identity.** Anything that reads from a placement (agent loaders, linters, `napoln config doctor`) should trust the directory name and treat the frontmatter `name:` as upstream provenance only. A mismatch between the two in a collision-namespaced install is expected, not an error, and `napoln config doctor` does not warn about it.
+
+This is pinned by `tests/integration/test_skill_identity.py`.
+
 ---
 
 ## Core Workflows

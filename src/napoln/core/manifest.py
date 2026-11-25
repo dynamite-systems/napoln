@@ -39,6 +39,9 @@ class SkillEntry(BaseModel):
 
     `name` is the upstream skill name from SKILL.md frontmatter. Two entries
     can share the same `name` if they came from different sources.
+
+    The install id is the canonical installed identity; `name` is kept for
+    traceability only. See "Skill Identity" in ARCHITECTURE.md.
     """
 
     source: str
