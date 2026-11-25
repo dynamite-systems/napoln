@@ -93,15 +93,12 @@ def run_add(
         resolved_list = [resolved_result]
 
     # Detect agents — prefer configured defaults over auto-detection
-    default_agent_ids: list[str] = agents_mod.load_default_agent_ids(napoln_home)
-    agent_configs: list[agents_mod.AgentConfig]
     try:
-        agent_configs = agents_mod.resolve_agents(
-            agent_ids, home, project_root, scope, default_agent_ids=default_agent_ids
-        )
+        selection = agents_mod.select_agents(agent_ids, napoln_home, home, project_root, scope)
     except ValueError as e:
         output.error(str(e))
         return 1
+    agent_configs: list[agents_mod.AgentConfig] = selection.agents
 
     if not agent_configs:
         output.error(
@@ -110,9 +107,7 @@ def run_add(
         )
         return 1
 
-    # If the user has multiple agents installed but never configured defaults,
-    # nudge them toward `napoln setup` so they don't keep spray-installing.
-    if agent_ids is None and not default_agent_ids and scope == "global" and len(agent_configs) > 1:
+    if selection.suggest_setup:
         output.info(
             f"Installing to all {len(agent_configs)} detected agents. "
             "Run `napoln setup` to choose defaults."

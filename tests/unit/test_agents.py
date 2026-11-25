@@ -7,6 +7,7 @@ from napoln.core.agents import (
     deduplicate_placements,
     detect_agents,
     resolve_agents,
+    select_agents,
 )
 
 
@@ -106,6 +107,61 @@ class TestResolveAgents:
         (tmp_path / ".claude").mkdir()
         agents = resolve_agents(None, tmp_path)
         assert any(a.id == "claude-code" for a in agents)
+
+
+class TestSelectAgents:
+    """Target-agent selection for installs, including the setup nudge."""
+
+    @pytest.fixture
+    def napoln_home(self, tmp_path):
+        path = tmp_path / ".napoln"
+        path.mkdir()
+        return path
+
+    @pytest.fixture
+    def two_detected(self, tmp_path):
+        (tmp_path / ".claude").mkdir()
+        (tmp_path / ".gemini").mkdir()
+        return tmp_path
+
+    def test_auto_detect_multiple_suggests_setup(self, napoln_home, two_detected):
+        selection = select_agents(None, napoln_home, two_detected)
+        ids = [a.id for a in selection.agents]
+        assert "claude-code" in ids
+        assert "gemini-cli" in ids
+        assert selection.suggest_setup is True
+
+    def test_configured_defaults_preferred_without_nudge(self, napoln_home, two_detected):
+        (napoln_home / "config.toml").write_text(
+            '[napoln]\ndefault_agents = ["claude-code", "gemini-cli"]\n'
+        )
+        selection = select_agents(None, napoln_home, two_detected)
+        assert [a.id for a in selection.agents] == ["claude-code", "gemini-cli"]
+        assert selection.suggest_setup is False
+
+    def test_explicit_agents_no_nudge(self, napoln_home, two_detected):
+        selection = select_agents(["claude-code", "pi"], napoln_home, two_detected)
+        assert [a.id for a in selection.agents] == ["claude-code", "pi"]
+        assert selection.suggest_setup is False
+
+    def test_project_scope_no_nudge(self, napoln_home, tmp_path):
+        project = tmp_path / "proj"
+        (project / ".claude").mkdir(parents=True)
+        (project / ".gemini").mkdir()
+        selection = select_agents(None, napoln_home, tmp_path, project, "project")
+        assert len(selection.agents) > 1
+        assert selection.suggest_setup is False
+
+    def test_single_detected_no_nudge(self, napoln_home, tmp_path, monkeypatch):
+        monkeypatch.setattr("napoln.core.agents._check_on_path", lambda _cmd: False)
+        (tmp_path / ".claude").mkdir()
+        selection = select_agents(None, napoln_home, tmp_path)
+        assert [a.id for a in selection.agents] == ["claude-code"]
+        assert selection.suggest_setup is False
+
+    def test_unknown_agent_raises(self, napoln_home, tmp_path):
+        with pytest.raises(ValueError, match="Unknown agent"):
+            select_agents(["nonexistent"], napoln_home, tmp_path)
 
 
 class TestDeduplicatePlacements:

@@ -226,6 +226,42 @@ def resolve_agents(
     return detect_agents(home, project_root, scope)
 
 
+@dataclass(frozen=True)
+class AgentSelection:
+    """Outcome of choosing which agents an install should target.
+
+    `suggest_setup` is set when the user gave no ``--agents``, has no configured
+    defaults, and auto-detection found more than one agent for a global install.
+    The caller can nudge them toward ``napoln setup`` so they don't keep
+    installing to every detected agent.
+    """
+
+    agents: list[AgentConfig]
+    suggest_setup: bool
+
+
+def select_agents(
+    agent_ids: list[str] | None,
+    napoln_home: Path,
+    home: Path,
+    project_root: Path | None = None,
+    scope: str = "global",
+) -> AgentSelection:
+    """Pick target agents, preferring configured defaults over auto-detection.
+
+    Raises:
+        ValueError: If an unknown agent ID is specified in ``agent_ids``.
+    """
+    default_agent_ids = load_default_agent_ids(napoln_home)
+    agents = resolve_agents(
+        agent_ids, home, project_root, scope, default_agent_ids=default_agent_ids
+    )
+    suggest_setup = (
+        agent_ids is None and not default_agent_ids and scope == "global" and len(agents) > 1
+    )
+    return AgentSelection(agents=agents, suggest_setup=suggest_setup)
+
+
 def deduplicate_placements(
     agents: list[AgentConfig],
     skill_name: str,
