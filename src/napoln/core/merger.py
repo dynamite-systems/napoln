@@ -199,6 +199,11 @@ def merge_skill(
             # No changes anywhere
             continue
 
+        if ours_content == theirs_content:
+            # Local copy already matches upstream (e.g. a shared directory
+            # merged earlier in the same upgrade) — nothing to do
+            continue
+
         if not ours_changed:
             # Fast-forward: replace with upstream
             shutil.copy2(str(theirs), str(ours))
