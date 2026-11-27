@@ -6,7 +6,10 @@ import pytest
 
 from napoln.core import resolver
 from napoln.core.resolver import (
+    DEFAULT_VERSION,
     ParsedSource,
+    _extract_description,
+    _extract_version,
     _fetch_sentinel,
     _should_fetch,
     parse_source,
@@ -382,3 +385,23 @@ class TestResolveGitSubdirectory:
     def test_subdirectory_errors(self, bundle_cache, path, skill_filter, message):
         with pytest.raises(ResolverError, match=message):
             resolver.resolve_git(self._parsed(path), bundle_cache, skill_filter=skill_filter)
+
+
+class TestFrontmatterExtractionFallbacks:
+    """Unparseable SKILL.md frontmatter falls back to defaults instead of crashing."""
+
+    @pytest.mark.parametrize(
+        "content",
+        [
+            b"---\n[invalid yaml\n---\n# Hi",
+            b"---\nversion: 2024-13-01\ndescription: x\n---\n# Hi",
+            b"---\nversion: !!int abc\ndescription: x\n---\n# Hi",
+            b"---\nversion: 1.0.0\ndescription: \xff\xfe\n---\n# Hi",
+        ],
+        ids=["yaml-syntax", "invalid-date", "invalid-tagged-int", "invalid-utf8"],
+    )
+    def test_malformed_frontmatter(self, tmp_path, content):
+        (tmp_path / "SKILL.md").write_bytes(content)
+
+        assert _extract_version(tmp_path) == DEFAULT_VERSION
+        assert _extract_description(tmp_path) == ""

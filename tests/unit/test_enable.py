@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
-from napoln.commands.enable import _get_skills_to_enable
+import pytest
+
+from napoln.commands.enable import _get_skills_to_enable, _place_skill_for_agent
 from napoln.core import manifest as manifest_mod
+from napoln.core.agents import AGENTS
 
 
 class TestGetSkillsToEnable:
@@ -115,3 +118,44 @@ class TestGetSkillsToEnable:
         result = _get_skills_to_enable(mf, "hermes")
         assert len(result) == 1
         assert result[0][0] == "skill-a"
+
+
+class TestPlaceSkillForAgent:
+    @staticmethod
+    def _entry(source: str) -> manifest_mod.SkillEntry:
+        return manifest_mod.SkillEntry(
+            source=source,
+            version="1.0.0",
+            store_hash="abc1234",
+            installed="2024-01-01T00:00:00Z",
+            updated="2024-01-01T00:00:00Z",
+        )
+
+    def test_unfetchable_source_is_reported(self, tmp_path, tmp_home, napoln_home, capsys):
+        """A store miss whose source can no longer be resolved is reported, not raised."""
+        entry = self._entry(str(tmp_path / "gone"))
+
+        result = _place_skill_for_agent(
+            "my-skill", entry, AGENTS["claude-code"], napoln_home, tmp_home, "global", None
+        )
+
+        assert result is None
+        assert "Failed to retrieve 'my-skill'" in capsys.readouterr().err
+        assert not (tmp_home / ".claude" / "skills" / "my-skill").exists()
+
+    def test_programming_errors_propagate(self, tmp_home, napoln_home, monkeypatch):
+        def buggy_ensure_stored(*_args, **_kwargs):
+            raise TypeError("bug")
+
+        monkeypatch.setattr("napoln.commands.enable.store.ensure_stored", buggy_ensure_stored)
+
+        with pytest.raises(TypeError, match="bug"):
+            _place_skill_for_agent(
+                "my-skill",
+                self._entry("owner/repo"),
+                AGENTS["claude-code"],
+                napoln_home,
+                tmp_home,
+                "global",
+                None,
+            )
