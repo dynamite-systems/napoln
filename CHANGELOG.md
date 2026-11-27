@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.13](https://github.com/dynamite-systems/napoln/compare/v0.2.12...v0.2.13) (2026-11-27)
+
+
+### Bug Fixes
+
+* sync runtime version and uv.lock with release metadata ([#128](https://github.com/dynamite-systems/napoln/issues/128)) ([74e0f5f](https://github.com/dynamite-systems/napoln/commit/74e0f5f2fd4258be0cd5af878290156e9dcd9443))
+
+
+### Documentation
+
+* split README introduction into two paragraphs ([#123](https://github.com/dynamite-systems/napoln/issues/123)) ([945e5fb](https://github.com/dynamite-systems/napoln/commit/945e5fbc7b48a7957a70604919e29681f32b2f75))
+
 ## [0.2.12](https://github.com/raiderrobert/napoln/compare/v0.2.11...v0.2.12) (2026-09-22)
 
 
