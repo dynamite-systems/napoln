@@ -14,7 +14,7 @@ from enum import StrEnum
 from pathlib import Path
 
 from napoln.core.store import store_skill
-from napoln.errors import MultipleSkillsError, ResolverError
+from napoln.errors import MultipleSkillsError, ResolverError, SourcePathNotFoundError
 
 
 class SourceType(StrEnum):
@@ -469,7 +469,7 @@ def _discovery_root(repo_dir: Path, subpath: str) -> Path:
         return repo_dir
     root = repo_dir / subpath
     if not root.is_dir():
-        raise ResolverError(
+        raise SourcePathNotFoundError(
             f"Path '{subpath}' does not exist in the repository",
             fix="Check the path within the repository.",
         )

@@ -130,3 +130,26 @@ class TestResolveInstallId:
         assert r.install_id == "repo-b:shared-name"
         assert r.existing is None
         assert r.collision_with == "/repo-a/shared-name"
+
+    def test_same_name_from_same_repo_at_new_path_reuses_entry(self):
+        """A skill that moved within its repo is the same skill, not a collision (#119)."""
+        mf = Manifest()
+        mf.skills["beta"] = _entry(source="github.com/o/r/skills/beta", name="beta")
+        resolved = _git_resolved("github.com", "o", "r", "bundle/skills/beta")
+
+        r = resolve_install_id(mf, resolved, "beta")
+
+        assert r.install_id == "beta"
+        assert r.existing is mf.skills["beta"]
+        assert r.collision_with is None
+
+    def test_same_name_from_different_repo_still_namespaces(self):
+        mf = Manifest()
+        mf.skills["beta"] = _entry(source="github.com/o/r/skills/beta", name="beta")
+        resolved = _git_resolved("github.com", "o", "other", "skills/beta")
+
+        r = resolve_install_id(mf, resolved, "beta")
+
+        assert r.install_id == "o.other:beta"
+        assert r.existing is None
+        assert r.collision_with == "github.com/o/r/skills/beta"
