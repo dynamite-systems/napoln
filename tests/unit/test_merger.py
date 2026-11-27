@@ -139,6 +139,77 @@ class TestMergeSkill:
         assert "old.md" in updated
         assert not (merge_dirs["working"] / "old.md").exists()
 
+    def test_repeated_merge_of_matching_script_is_not_a_conflict(self, tmp_path):
+        """A script that already matches upstream is not reported as a conflict.
+
+        The first merge fast-forwards the working copy. A second merge of that
+        same directory, which shared agent placements do, must not treat the
+        script as a conflict just because it differs from the old base.
+        """
+        base = tmp_path / "base"
+        new = tmp_path / "new"
+        work = tmp_path / "work"
+        for name, script in (
+            ("base", "echo v1\n"),
+            ("new", "echo v2\n"),
+            ("work", "echo v1\n"),
+        ):
+            root = tmp_path / name
+            (root / "scripts").mkdir(parents=True)
+            skill = "# skill new\n" if name == "new" else "# skill base\n"
+            (root / "SKILL.md").write_text(skill)
+            (root / "scripts" / "run.sh").write_text(script)
+
+        first_updated, first_conflicted = merge_skill(work, base, new)
+        assert "scripts/run.sh" in first_updated
+        assert "SKILL.md" in first_updated
+        assert first_conflicted == []
+
+        updated, conflicted = merge_skill(work, base, new)
+
+        assert conflicted == []
+        assert "scripts/run.sh" not in updated
+        assert (work / "scripts" / "run.sh").read_text() == "echo v2\n"
+        assert (work / "SKILL.md").read_text() == "# skill new\n"
+
+    def test_script_resolved_to_upstream_bytes_is_not_a_conflict(self, tmp_path):
+        """Editing a non-Markdown file until it matches upstream clears the conflict."""
+        base = tmp_path / "base"
+        new = tmp_path / "new"
+        work = tmp_path / "work"
+        for name in ("base", "new", "work"):
+            root = tmp_path / name
+            (root / "scripts").mkdir(parents=True)
+            (root / "SKILL.md").write_text("# skill\n")
+        (base / "scripts" / "run.sh").write_text("echo v1\n")
+        (new / "scripts" / "run.sh").write_text("echo v2\n")
+        (work / "scripts" / "run.sh").write_text("echo v2\n")
+
+        updated, conflicted = merge_skill(work, base, new)
+
+        assert conflicted == []
+        assert updated == []
+        assert (work / "scripts" / "run.sh").read_text() == "echo v2\n"
+
+    def test_divergent_script_is_still_a_conflict(self, tmp_path):
+        """A non-Markdown file that differs from both base and upstream stays conflicted."""
+        base = tmp_path / "base"
+        new = tmp_path / "new"
+        work = tmp_path / "work"
+        for name in ("base", "new", "work"):
+            root = tmp_path / name
+            (root / "scripts").mkdir(parents=True)
+            (root / "SKILL.md").write_text("# skill\n")
+        (base / "scripts" / "run.sh").write_text("echo v1\n")
+        (new / "scripts" / "run.sh").write_text("echo v2\n")
+        (work / "scripts" / "run.sh").write_text("echo local\n")
+
+        updated, conflicted = merge_skill(work, base, new)
+
+        assert conflicted == ["scripts/run.sh"]
+        assert updated == []
+        assert (work / "scripts" / "run.sh").read_text() == "echo local\n"
+
 
 class TestHasConflictMarkers:
     """Conflict marker detection."""
