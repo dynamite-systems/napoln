@@ -209,6 +209,10 @@ def merge_skill(
             # Local changes only, upstream unchanged — no-op
             continue
 
+        if ours_content == theirs_content:
+            # Local already matches upstream — nothing to merge
+            continue
+
         # Both changed — need to merge
         if rel_path == "SKILL.md" or rel_path.endswith(".md"):
             # Three-way merge for markdown files
