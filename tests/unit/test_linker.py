@@ -1,8 +1,14 @@
 """Tests for napoln.core.linker — reflink/copy placement."""
 
+from __future__ import annotations
+
+import importlib.metadata
+import tomllib
+from pathlib import Path
+
 import pytest
 
-from napoln.core.linker import clone_file, place_skill, restore_placement
+from napoln.core.linker import clone_file, place_skill, restore_placement, write_provenance
 
 
 @pytest.fixture
@@ -140,3 +146,17 @@ class TestRestorePlacement:
 
         assert result is None
         assert (placement / "SKILL.md").read_text() == "already here"
+
+
+class TestWriteProvenance:
+    """write_provenance — .napoln tracking metadata."""
+
+    def test_records_installed_napoln_version(self, tmp_path: Path) -> None:
+        """Provenance records the installed napoln package version."""
+        target = tmp_path / "placement"
+        target.mkdir()
+
+        write_provenance(target, "owner/repo", "1.0.0", "abc123", "copy")
+
+        data = tomllib.loads((target / ".napoln").read_text())
+        assert data["napoln_version"] == importlib.metadata.version("napoln")
