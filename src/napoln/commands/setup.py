@@ -31,7 +31,7 @@ def _write_default_agents(config_path: Path, agent_ids: list[str]) -> None:
     data = _load_config(config_path)
     section = data.setdefault("napoln", {})
     section["default_agents"] = agent_ids
-    section.setdefault("default_scope", "global")
+    section.setdefault("default_scope", "project")
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(tomli_w.dumps(data), encoding="utf-8")
 

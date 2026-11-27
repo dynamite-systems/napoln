@@ -45,17 +45,26 @@ out of the box.
 
 ## Quick Start
 
+From the root of a project:
+
 ```bash
+cd ~/code/my-app
 napoln add owner/repo --all
 ```
 
-napoln clones the repo, discovers all skills, and places them in every detected agent's skill directory:
+napoln clones the repo, discovers all skills, and places them in the project skill directory of every detected agent:
 
 ```
-✓ Placed 'code-review' in ~/.claude/skills/code-review (clone)
-✓ Placed 'code-review' in ~/.agents/skills/code-review (clone)
-✓ Placed 'code-review' in ~/.cursor/skills/code-review (clone)
+✓ Placed 'code-review' in ~/code/my-app/.claude/skills/code-review (clone)
+✓ Placed 'code-review' in ~/code/my-app/.agents/skills/code-review (clone)
 ✓ Added 'code-review' v1.2.0
+```
+
+To make a skill available in every agent session instead, install it globally:
+
+```bash
+napoln add owner/repo --skill code-review --global
+# ✓ Placed 'code-review' in ~/.claude/skills/code-review (clone)
 ```
 
 Install a specific skill, pin a version, or use a local path:
@@ -117,7 +126,32 @@ napoln init [<name>]          Scaffold a new SKILL.md
 napoln config                 View configuration and run housekeeping
 ```
 
-All mutating commands support `--dry-run`. Use `-p` for project scope on any command.
+All mutating commands support `--dry-run`.
+
+## Scopes
+
+Skills are installed in one of two scopes:
+
+| Scope | Placed in | Recorded in | Loaded |
+|-------|-----------|-------------|--------|
+| Project | `<project>/.claude/skills/`, `<project>/.agents/skills/`, ... | `<project>/.napoln/manifest.toml` | Only when the agent runs in that project |
+| Global | `~/.claude/skills/`, `~/.agents/skills/`, ... | `~/.napoln/manifest.toml` | In every agent session |
+
+`napoln add` installs into the current project by default. The current directory is a project root if it contains `.git`, `.napoln`, `.claude`, `.agents`, `.cursor`, or `.hermes`. Your home directory is never treated as a project. Outside a project, or from a subdirectory of one, `napoln add` stops with an error; pass `--global` (`-g`) to install for every session, or `--project` (`-p`) to treat the current directory as the project root.
+
+`remove`, `upgrade`, `enable`, and `config doctor` still act on global skills unless given `-p`. When a named skill is only found in the other scope, `remove` and `upgrade` print the command to use.
+
+The bundled `napoln-manage` skill is always installed globally.
+
+### Upgrading from 0.2.x
+
+Earlier versions of napoln installed globally by default and wrote `default_scope = "global"` to `~/.napoln/config.toml`. That setting is honored, so existing installs keep installing globally. To switch to the project default:
+
+```bash
+napoln config set napoln.default_scope project
+```
+
+Skills that are already installed globally stay where they are.
 
 ## Supported Agents
 
@@ -141,10 +175,10 @@ maintaining per-agent variants.
 
 ## Team Workflow
 
-Install with `--project` and commit the manifest:
+Install from the project root and commit the manifest:
 
 ```bash
-napoln add owner/repo --skill code-review --project
+napoln add owner/repo --skill code-review
 # Creates .napoln/manifest.toml  (commit this)
 # Places into .claude/skills/    (gitignore these)
 ```

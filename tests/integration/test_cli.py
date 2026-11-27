@@ -57,6 +57,7 @@ class TestHelpCommand:
         assert "--all" in result.output
         assert "--skill" in result.output
         assert "--project" in result.output
+        assert "--global" in result.output
 
     def test_init_help(self):
         result = CliRunner().invoke(app, ["init", "--help"])

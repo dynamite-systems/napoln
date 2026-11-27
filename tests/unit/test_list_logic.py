@@ -58,6 +58,15 @@ class TestGetAgentDirs:
         )
         assert _get_agent_dirs(entry, "/home/user") == [".agents"]
 
+    @pytest.mark.parametrize(
+        "path",
+        ["/home/user/code/app/.claude/skills/my-skill", "/srv/app/.claude/skills/my-skill"],
+        ids=["project-under-home", "project-outside-home"],
+    )
+    def test_project_placement(self, path):
+        entry = _entry_with_agents({"claude-code": path})
+        assert _get_agent_dirs(entry, "/home/user") == [".claude"]
+
     def test_no_agents(self):
         entry = _entry_with_agents({})
         assert _get_agent_dirs(entry, "/home/user") == []

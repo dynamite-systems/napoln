@@ -267,3 +267,20 @@ def get_manifest_path(
     if scope == "project" and project_root:
         return project_root / NAPOLN_DIR / "manifest.toml"
     return napoln_home / "manifest.toml"
+
+
+def find_in_other_scope(napoln_home: Path, name: str, scope: str, project_root: Path) -> str | None:
+    """Return the scope other than *scope* whose manifest lists *name*, if any.
+
+    The project manifest is looked up at *project_root*. Manifests that are
+    missing or unreadable are treated as not listing the skill.
+    """
+    other = "global" if scope == "project" else "project"
+    path = get_manifest_path(napoln_home, other, project_root)
+    if path == get_manifest_path(napoln_home, scope, project_root) or not path.exists():
+        return None
+    try:
+        mf = read_manifest(path)
+    except ManifestError:
+        return None
+    return other if name in mf.skills else None
