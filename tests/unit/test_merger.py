@@ -139,6 +139,46 @@ class TestMergeSkill:
         assert "old.md" in updated
         assert not (merge_dirs["working"] / "old.md").exists()
 
+    def test_non_markdown_already_matching_upstream_is_not_conflict(self, merge_dirs):
+        """A non-Markdown file that already matches upstream is skipped, not conflicted."""
+        for name, script in (("base", "echo v1\n"), ("working", "echo v2\n"), ("new", "echo v2\n")):
+            (merge_dirs[name] / "scripts").mkdir()
+            (merge_dirs[name] / "scripts" / "run.sh").write_text(script)
+
+        updated, conflicted = merge_skill(
+            merge_dirs["working"], merge_dirs["base"], merge_dirs["new"]
+        )
+
+        assert not updated
+        assert not conflicted
+        assert (merge_dirs["working"] / "scripts" / "run.sh").read_text() == "echo v2\n"
+
+    def test_merging_same_directory_twice_is_clean(self, merge_dirs):
+        """Re-merging an already-upgraded directory reports no conflicts."""
+        for name, version in (("base", "v1"), ("working", "v1"), ("new", "v2")):
+            (merge_dirs[name] / "scripts").mkdir()
+            (merge_dirs[name] / "SKILL.md").write_text(f"# skill {version}\n")
+            (merge_dirs[name] / "scripts" / "run.sh").write_text(f"echo {version}\n")
+
+        first = merge_skill(merge_dirs["working"], merge_dirs["base"], merge_dirs["new"])
+        second = merge_skill(merge_dirs["working"], merge_dirs["base"], merge_dirs["new"])
+
+        assert first == (["SKILL.md", "scripts/run.sh"], [])
+        assert second == ([], [])
+
+    def test_non_markdown_both_changed_differently_conflicts(self, merge_dirs):
+        """A non-Markdown file changed differently on both sides is still a conflict."""
+        (merge_dirs["base"] / "run.sh").write_text("echo v1\n")
+        (merge_dirs["working"] / "run.sh").write_text("echo local\n")
+        (merge_dirs["new"] / "run.sh").write_text("echo v2\n")
+
+        updated, conflicted = merge_skill(
+            merge_dirs["working"], merge_dirs["base"], merge_dirs["new"]
+        )
+
+        assert conflicted == ["run.sh"]
+        assert (merge_dirs["working"] / "run.sh").read_text() == "echo local\n"
+
 
 class TestHasConflictMarkers:
     """Conflict marker detection."""
