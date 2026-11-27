@@ -57,6 +57,11 @@ def test_add_subdir_missing():
     pass
 
 
+@scenario("../features/add.feature", "Add all skips test fixtures and per-agent copies")
+def test_add_all_skips_fixtures_and_copies():
+    pass
+
+
 # ─── Given ────────────────────────────────────────────────────────────────────
 # "Claude Code is installed" is in conftest.
 
@@ -75,18 +80,31 @@ def skill_already_installed(env: NapolnTestEnv, name: str, cli_runner: CliRunner
 
 @given(parsers.parse('a cached git repo "{source}" with bundles "{bundle_a}" and "{bundle_b}"'))
 def cached_bundle_repo(env: NapolnTestEnv, source: str, bundle_a: str, bundle_b: str):
+    rels = []
+    for bundle in (bundle_a, bundle_b):
+        bundle_name, names = bundle.split(":")
+        rels.extend(f"{bundle_name}/skills/{name}" for name in names.split(","))
+    _cache_git_repo(env, source, rels)
+
+
+@given(parsers.parse('a cached git repo "{source}" with skills at "{paths}"'))
+def cached_repo_with_skills(env: NapolnTestEnv, source: str, paths: str):
+    _cache_git_repo(env, source, paths.split(","))
+
+
+def _cache_git_repo(env: NapolnTestEnv, source: str, rels: list[str]) -> None:
+    """Commit skills at the given repo-relative paths into a pre-fetched cache clone."""
     owner, repo = source.split("/")
     cache_dir = env.napoln_home / "cache"
     clone_dir = cache_dir / f"{owner}-{repo}"
-    for bundle in (bundle_a, bundle_b):
-        bundle_name, names = bundle.split(":")
-        for name in names.split(","):
-            skill_dir = clone_dir / bundle_name / "skills" / name
-            skill_dir.mkdir(parents=True)
-            (skill_dir / "SKILL.md").write_text(
-                f"---\nname: {name}\ndescription: A test skill.\n"
-                f'metadata:\n  version: "1.0.0"\n---\n\n# {name}\n'
-            )
+    for rel in rels:
+        skill_dir = clone_dir / rel
+        name = skill_dir.name
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text(
+            f"---\nname: {name}\ndescription: A test skill.\n"
+            f'metadata:\n  version: "1.0.0"\n---\n\n# {name}\n'
+        )
     git_env = {
         "GIT_AUTHOR_NAME": "t",
         "GIT_AUTHOR_EMAIL": "t@example.com",
