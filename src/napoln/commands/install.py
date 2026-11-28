@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from napoln import output
-from napoln.core import linker, manifest, store
+from napoln.core import linker, manifest, resolver
 from napoln.core.home import NAPOLN_DIR, get_napoln_home
 from napoln.errors import NapolnError
 
@@ -26,7 +26,7 @@ def _sync_manifest(
 
     for skill_name, entry in sorted(mf.skills.items()):
         try:
-            store_path = store.ensure_stored(
+            store_path = resolver.ensure_stored(
                 skill_name, entry.version, entry.store_hash, entry.source, napoln_home
             )
         except (NapolnError, OSError):

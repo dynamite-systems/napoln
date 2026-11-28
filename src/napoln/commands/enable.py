@@ -7,7 +7,7 @@ from typing import cast
 
 from napoln import output
 from napoln.core import agents as agents_mod
-from napoln.core import linker, manifest, store
+from napoln.core import linker, manifest, resolver
 from napoln.core.home import get_napoln_home
 from napoln.prompts import SkillChoice, pick_agents, pick_skills
 
@@ -57,7 +57,7 @@ def _place_skill_for_agent(
     """
     # Get store path - will re-fetch if needed
     try:
-        store_path = store.ensure_stored(
+        store_path = resolver.ensure_stored(
             skill_name,
             skill_entry.version,
             skill_entry.store_hash,
