@@ -210,9 +210,9 @@ def _upgrade_skill(
         else:
             entry.version = new_version
             entry.store_hash = new_content_hash
-            from napoln.core.manifest import _now_iso
+            from napoln.core.manifest import now_iso
 
-            entry.updated = _now_iso()
+            entry.updated = now_iso()
             manifest.write_manifest(mf, manifest_path)
             output.success(f"Upgraded '{skill_name}' to v{new_version}")
 
