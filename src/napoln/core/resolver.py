@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 
-from napoln.core.store import store_skill
+from napoln.core.store import get_stored_skill, store_skill
 from napoln.errors import MultipleSkillsError, ResolverError
 
 
@@ -693,3 +693,22 @@ def resolve_and_store(
         raise ResolverError(f"Unsupported source type: {parsed.source_type}")
 
     return store_skill(resolved.skill_dir, skill_name, resolved.version, napoln_home)
+
+
+def ensure_stored(
+    skill_name: str,
+    version: str,
+    store_hash: str,
+    source: str,
+    napoln_home: Path,
+) -> Path:
+    """Return the store path for a skill, re-fetching from source if missing.
+
+    Raises ResolverError or StoreError if the skill can't be found or fetched.
+    """
+    store_path = get_stored_skill(skill_name, version, store_hash, napoln_home)
+    if store_path is not None:
+        return store_path
+
+    store_path, _ = resolve_and_store(source, skill_name, napoln_home, version_constraint=version)
+    return store_path
