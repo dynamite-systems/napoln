@@ -92,6 +92,9 @@ def run_add(
     else:
         resolved_list = [resolved_result]
 
+    if resolved_list and resolved_list[0].notice:
+        output.info(resolved_list[0].notice)
+
     # Detect agents — prefer configured defaults over auto-detection
     default_agent_ids: list[str] = agents_mod.load_default_agent_ids(napoln_home)
     agent_configs: list[agents_mod.AgentConfig]
@@ -352,6 +355,8 @@ def _pick_from_multi_skill_repo(
     Returns a list of ResolvedSource, or None if the user cancels.
     """
 
+    if err.notice:
+        output.info(err.notice)
     output.info(f"Found {len(err.skill_dirs)} skills in {source}")
 
     # Collect sources already recorded in any reachable manifest so we can
