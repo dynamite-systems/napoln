@@ -59,7 +59,7 @@ class Manifest(BaseModel):
     skills: dict[str, SkillEntry] = Field(default_factory=dict)
 
 
-def _now_iso() -> str:
+def now_iso() -> str:
     """Return current UTC time as ISO-8601 string."""
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -194,7 +194,7 @@ def add_skill_to_manifest(
     Returns:
         Updated manifest.
     """
-    now = _now_iso()
+    now = now_iso()
     upstream = name if name is not None else install_id
 
     if install_id in manifest.skills:

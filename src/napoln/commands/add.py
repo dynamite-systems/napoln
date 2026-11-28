@@ -14,8 +14,8 @@ from napoln.core.resolver import (
     ParsedSource,
     ResolvedSource,
     SourceType,
-    _extract_description,
-    _resolve_version,
+    extract_description,
+    resolve_version,
     parse_source,
     resolve_git,
     resolve_local,
@@ -377,7 +377,7 @@ def _pick_from_multi_skill_repo(
         choices.append(
             SkillChoice(
                 name=sd.name,
-                description=_extract_description(sd),
+                description=extract_description(sd),
                 path=sd,
                 installed=sid in installed_sources,
             )
@@ -393,7 +393,7 @@ def _pick_from_multi_skill_repo(
 
     results = []
     for choice in selected:
-        version = _resolve_version(choice.path, ref, err.repo_dir)
+        version = resolve_version(choice.path, ref, err.repo_dir)
         rel = choice.path.relative_to(err.repo_dir)
         sid = f"{source_id}/{rel}" if str(rel) != "." else source_id
         results.append(

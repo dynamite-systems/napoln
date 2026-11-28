@@ -328,7 +328,7 @@ def resolve_git(
 
         results = []
         for sd in skill_dirs:
-            version = _resolve_version(sd, ref, clone_dir)
+            version = resolve_version(sd, ref, clone_dir)
             rel = sd.relative_to(clone_dir)
             sid = f"{source_id}/{rel}" if str(rel) != "." else source_id
             results.append(
@@ -348,7 +348,7 @@ def resolve_git(
 
     # Single skill resolution
     skill_dir = _find_skill_in_repo(clone_dir, parsed.path)
-    version = _resolve_version(skill_dir, ref, clone_dir)
+    version = resolve_version(skill_dir, ref, clone_dir)
 
     rel = skill_dir.relative_to(clone_dir)
     if str(rel) != ".":
@@ -380,7 +380,7 @@ def _get_head_short_hash(repo_dir: Path) -> str:
         return ""
 
 
-def _resolve_version(skill_dir: Path, ref: str, repo_dir: Path) -> str:
+def resolve_version(skill_dir: Path, ref: str, repo_dir: Path) -> str:
     """Resolve a skill's version from metadata, git ref, or HEAD hash.
 
     Priority:
@@ -553,7 +553,7 @@ def _extract_version(skill_dir: Path) -> str:
     return DEFAULT_VERSION
 
 
-def _extract_description(skill_dir: Path) -> str:
+def extract_description(skill_dir: Path) -> str:
     """Extract description from SKILL.md frontmatter."""
     skill_md = skill_dir / "SKILL.md"
     if not skill_md.exists():
@@ -607,7 +607,7 @@ def discover_skill_choices(repo_dir: Path) -> list[tuple[str, str, Path]]:
     results = []
     for skill_dir in discover_skills_in_repo(repo_dir):
         name = skill_dir.name
-        desc = _extract_description(skill_dir)
+        desc = extract_description(skill_dir)
         results.append((name, desc, skill_dir))
     return results
 
