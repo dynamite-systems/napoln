@@ -40,6 +40,7 @@ class ResolvedSource:
     cleanup: bool = False  # Whether to clean up skill_dir after use
     skill_name: str = ""  # Resolved skill name (from SKILL.md or directory name)
     parsed: ParsedSource | None = None  # Typed source metadata for git sources
+    notice: str = ""  # Informational message for the user (e.g. ref fallback)
 
 
 # Git shorthand patterns
@@ -292,21 +293,74 @@ def resolve_git(
     # Checkout the right version
     ref = parsed.version or _resolve_latest_version(clone_dir)
     if ref:
-        try:
-            subprocess.run(
-                ["git", "checkout", "--quiet", ref],
-                cwd=str(clone_dir),
-                capture_output=True,
-                check=True,
-            )
-        except subprocess.CalledProcessError as e:
-            raise ResolverError(
-                f"Could not checkout '{ref}' in {repo_url}",
-                cause=e.stderr.decode("utf-8", errors="replace").strip(),
-                fix=f"Check that the tag/branch/commit '{ref}' exists.",
-            )
+        _checkout(clone_dir, ref, repo_url)
 
     source_id = f"{parsed.host}/{parsed.owner}/{parsed.repo}"
+    try:
+        return _resolve_checkout(clone_dir, parsed, ref, source_id, skill_filter)
+    except MultipleSkillsError:
+        raise
+    except ResolverError:
+        # The latest semver tag may predate the skills (e.g. a product repo
+        # that added skills/ later). Only an auto-picked tag falls back;
+        # an explicit @version is honoured as-is.
+        if parsed.version or not ref:
+            raise
+        branch = _default_branch(clone_dir)
+        if not branch:
+            raise
+        _checkout(clone_dir, f"origin/{branch}", repo_url)
+        notice = (
+            f"Latest tag {ref} has no skills; using {branch} @ {_get_head_short_hash(clone_dir)}"
+        )
+        try:
+            return _resolve_checkout(clone_dir, parsed, "", source_id, skill_filter, notice)
+        except MultipleSkillsError as e:
+            e.notice = notice
+            raise
+
+
+def _checkout(clone_dir: Path, ref: str, repo_url: str) -> None:
+    """Check out a tag, branch, or commit in a cached clone."""
+    try:
+        subprocess.run(
+            ["git", "checkout", "--quiet", ref],
+            cwd=str(clone_dir),
+            capture_output=True,
+            check=True,
+        )
+    except subprocess.CalledProcessError as e:
+        raise ResolverError(
+            f"Could not checkout '{ref}' in {repo_url}",
+            cause=e.stderr.decode("utf-8", errors="replace").strip(),
+            fix=f"Check that the tag/branch/commit '{ref}' exists.",
+        )
+
+
+def _default_branch(repo_dir: Path) -> str:
+    """Return the remote's default branch name (e.g. 'main'), or '' if unknown."""
+    try:
+        result = subprocess.run(
+            ["git", "symbolic-ref", "--short", "refs/remotes/origin/HEAD"],
+            cwd=str(repo_dir),
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except subprocess.CalledProcessError:
+        return ""
+    return result.stdout.strip().removeprefix("origin/")
+
+
+def _resolve_checkout(
+    clone_dir: Path,
+    parsed: ParsedSource,
+    ref: str,
+    source_id: str,
+    skill_filter: str | None,
+    notice: str = "",
+) -> ResolvedSource | list[ResolvedSource]:
+    """Discover skills in the currently checked-out tree of a clone."""
     discovery_root = _discovery_root(clone_dir, parsed.path)
 
     # Handle multi-skill repos (or multi-skill subdirectories)
@@ -340,6 +394,7 @@ def resolve_git(
                     cleanup=False,
                     skill_name=sd.name,
                     parsed=parsed,
+                    notice=notice,
                 )
             )
         if len(results) == 1:
@@ -362,6 +417,7 @@ def resolve_git(
         cleanup=False,
         skill_name=skill_dir.name,
         parsed=parsed,
+        notice=notice,
     )
 
 

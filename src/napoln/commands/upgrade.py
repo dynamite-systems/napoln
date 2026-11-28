@@ -125,6 +125,9 @@ def _upgrade_skill(
         output.error(f"Failed to resolve update for '{skill_name}': {e}")
         return 1
 
+    if resolved.notice:
+        output.info(resolved.notice)
+
     # Check if there's actually a new version
     from napoln.core.hasher import hash_skill
 

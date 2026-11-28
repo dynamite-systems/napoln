@@ -50,6 +50,7 @@ class MultipleSkillsError(ResolverError):
         )
         self.repo_dir = repo_dir
         self.skill_dirs = skill_dirs
+        self.notice = ""  # Set when resolution fell back to another ref
 
 
 class MergeConflictError(NapolnError):

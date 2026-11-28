@@ -382,3 +382,86 @@ class TestResolveGitSubdirectory:
     def test_subdirectory_errors(self, bundle_cache, path, skill_filter, message):
         with pytest.raises(ResolverError, match=message):
             resolver.resolve_git(self._parsed(path), bundle_cache, skill_filter=skill_filter)
+
+
+class TestResolveGitLatestTagFallback:
+    """resolve_git falls back to the default branch when the latest tag has no skills."""
+
+    @staticmethod
+    def _git(cwd, *args):
+        subprocess.run(
+            [
+                "git",
+                "-c",
+                "user.name=t",
+                "-c",
+                "user.email=t@t",
+                "-c",
+                "commit.gpgsign=false",
+                "-c",
+                "tag.gpgsign=false",
+                *args,
+            ],
+            cwd=str(cwd),
+            capture_output=True,
+            check=True,
+        )
+
+    @pytest.fixture
+    def product_repo_cache(self, tmp_path):
+        """A cached clone whose only semver tag predates the skills/ directory."""
+        origin = tmp_path / "origin"
+        origin.mkdir()
+        self._git(origin, "init", "--quiet", "-b", "main")
+        (origin / "README.md").write_text("a product")
+        self._git(origin, "add", ".")
+        self._git(origin, "commit", "--quiet", "-m", "product")
+        self._git(origin, "tag", "v0.180.0")
+        for name in ("alpha", "beta"):
+            d = origin / "skills" / name
+            d.mkdir(parents=True)
+            (d / "SKILL.md").write_text(f"---\nname: {name}\ndescription: x\n---\n# Hi")
+        self._git(origin, "add", ".")
+        self._git(origin, "commit", "--quiet", "-m", "add skills")
+
+        cache_dir = tmp_path / "cache"
+        cache_dir.mkdir()
+        self._git(tmp_path, "clone", "--quiet", str(origin), str(cache_dir / "owner-repo"))
+        _fetch_sentinel(cache_dir, "owner", "repo").touch()
+        return cache_dir
+
+    @staticmethod
+    def _parsed(version: str = "") -> ParsedSource:
+        return ParsedSource(
+            source_type="git",
+            host="github.com",
+            owner="owner",
+            repo="repo",
+            path="",
+            version=version,
+            original="owner/repo",
+        )
+
+    @pytest.mark.parametrize("skill_filter", ["*", "beta"])
+    def test_falls_back_to_default_branch(self, product_repo_cache, skill_filter):
+        result = resolver.resolve_git(self._parsed(), product_repo_cache, skill_filter)
+        resolved = result if isinstance(result, list) else [result]
+
+        expected = ["alpha", "beta"] if skill_filter == "*" else ["beta"]
+        assert [r.skill_name for r in resolved] == expected
+        for r in resolved:
+            assert r.version.startswith("0.0.0+")
+            assert r.notice.startswith("Latest tag v0.180.0 has no skills; using main @ ")
+
+    def test_picker_offered_from_default_branch(self, product_repo_cache):
+        from napoln.errors import MultipleSkillsError
+
+        with pytest.raises(MultipleSkillsError) as exc:
+            resolver.resolve_git(self._parsed(), product_repo_cache)
+
+        assert sorted(d.name for d in exc.value.skill_dirs) == ["alpha", "beta"]
+        assert exc.value.notice.startswith("Latest tag v0.180.0 has no skills; using main @ ")
+
+    def test_explicit_version_does_not_fall_back(self, product_repo_cache):
+        with pytest.raises(ResolverError, match="No SKILL.md found"):
+            resolver.resolve_git(self._parsed("v0.180.0"), product_repo_cache, "*")
